@@ -142,14 +142,26 @@ def _observacao(herois_jogados):
 
 
 _CATALOGO_WEB = None
+_VERSAO_CATALOGO = None
+
+
+def _versao_arquivos():
+    """Data de modificação dos arquivos do catálogo e do índice de imagens."""
+    arquivos = list(catalogo.PASTA.glob("*.json")) + [catalogo.PASTA / "assets" / "indice.json"]
+    return tuple(a.stat().st_mtime if a.exists() else 0 for a in arquivos)
 
 
 def catalogo_web():
     """Catálogo enxuto para a interface, com o caminho local de cada imagem
-    (ou a URL original, se os assets não foram baixados)."""
-    global _CATALOGO_WEB
-    if _CATALOGO_WEB is not None:
+    (ou a URL original, se os assets não foram baixados). É refeito quando
+    os arquivos mudam (nova coleta ou novos assets), sem reiniciar o app."""
+    global _CATALOGO_WEB, _VERSAO_CATALOGO
+    versao = _versao_arquivos()
+    if _CATALOGO_WEB is not None and versao == _VERSAO_CATALOGO:
         return _CATALOGO_WEB
+    _VERSAO_CATALOGO = versao
+    catalogo.carregar.cache_clear()
+    catalogo._indices.cache_clear()  # o banco também passa a ligar partidas aos itens novos
     c = catalogo.carregar()
     try:
         indice = json.loads((catalogo.PASTA / "assets" / "indice.json").read_text("utf-8"))
@@ -167,7 +179,8 @@ def catalogo_web():
         "modos": [{"id": m["id"], "nome": m["nome"], "descricao": m["descricao"],
                    "icone": imagem(f"modos/{m['id']}", m["icone_url"])} for m in c["modos"]],
         "mapas": [{"id": m["id"], "nome": m["nome"], "nome_en": m["nome_en"], "modo": m["modo"],
-                   "pais": m["pais"], "imagem": imagem(f"mapas/{m['id']}", m["imagem_url"])}
+                   "pais": m["pais"], "lancamento": m["lancamento"],
+                   "imagem": imagem(f"mapas/{m['id']}", m["imagem_url"])}
                   for m in c["mapas"]],
         "herois": [{
             "id": h["id"], "nome": h["nome"], "nome_en": h["nome_en"], "funcao": h["funcao"],

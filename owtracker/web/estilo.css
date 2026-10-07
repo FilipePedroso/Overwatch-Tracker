@@ -286,7 +286,26 @@ main { padding: 24px 28px 40px; display: flex; flex-direction: column; gap: 20px
 .mapa img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; transition: opacity .2s; }
 .mapa::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(0deg, rgba(11,15,23,.95) 10%, rgba(11,15,23,.2) 80%); }
 .mapa > :not(img) { position: relative; z-index: 2; }
-.mapa:hover { border-color: #33405c; } .mapa:hover img { opacity: .75; }
+.mapa { text-decoration: none; cursor: pointer; }
+.mapa:hover { border-color: var(--laranja); } .mapa:hover img { opacity: .75; }
+
+/* detalhe do mapa */
+.cabeca-mapa {
+  position: relative; overflow: hidden; min-height: 220px; padding: 28px; border-radius: var(--raio);
+  border: 1px solid var(--borda); display: flex; align-items: flex-end; background: var(--painel);
+}
+.cabeca-mapa .fundo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .75; z-index: 0; }
+.cabeca-mapa::before {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(0deg, rgba(11,15,23,.97) 5%, rgba(11,15,23,.55) 55%, rgba(11,15,23,.2) 100%),
+              linear-gradient(90deg, rgba(11,15,23,.7), transparent 60%);
+}
+.cabeca-mapa > :not(.fundo) { position: relative; z-index: 2; }
+.cabeca-mapa h1 { font-size: 46px; font-style: italic; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+.cabeca-mapa p { color: var(--texto-2); margin-top: 10px; max-width: 620px; }
+.cabeca-mapa .chip { background: rgba(19,26,38,.85); }
+a.item { color: inherit; border-radius: 8px; padding: 4px; margin: -4px; }
+a.item:hover { background: var(--painel-2); }
 .mapa b { font: 600 19px "Barlow Condensed"; text-transform: uppercase; }
 .mapa small { color: var(--texto-2); font-size: 12px; display: flex; justify-content: space-between; }
 .mapa.nunca img { filter: grayscale(.8); opacity: .3; }

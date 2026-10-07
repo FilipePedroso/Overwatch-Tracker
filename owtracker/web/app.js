@@ -429,12 +429,76 @@ function paginaMapas() {
         <small style="color:var(--texto-3)">${todas.length} partidas</small><span class="pct" style="color:${corTaxa(tm)}">${pct(tm)}</span></div>
       <div class="mapas">${mapas.map((m) => {
         const x = porMapa.get(m.id) || [], t = taxa(x);
-        return `<div class="mapa ${x.length ? "" : "nunca"}" title="${esc(m.nome_en)}">
+        return `<a class="mapa ${x.length ? "" : "nunca"}" href="#/mapas/${m.id}" title="${esc(m.nome_en)}">
           <img src="${m.imagem}" alt="">
           <b>${esc(m.nome)}</b>
-          <small><span>${esc(m.pais)}</span><span>${x.length ? `${x.length} jogo${x.length > 1 ? "s" : ""} · <b style="color:${corTaxa(t)};font:inherit">${pct(t)}</b>` : "nunca jogado"}</span></small></div>`;
+          <small><span>${esc(m.pais)}</span><span>${x.length ? `${x.length} jogo${x.length > 1 ? "s" : ""} · <b style="color:${corTaxa(t)};font:inherit">${pct(t)}</b>` : "nunca jogado"}</span></small></a>`;
       }).join("")}</div></section>`;
   }).join("")}`;
+}
+
+function paginaMapa(id) {
+  const m = app.ref.mapa[id];
+  if (!m) return `<div class="vazio">Mapa não encontrado.</div>`;
+  const modo = app.ref.modo[m.modo];
+  const todas = filtradas();
+  const l = todas.filter((p) => mapaDe(p)?.id === id), t = taxa(l);
+  const doModo = todas.filter((p) => mapaDe(p)?.modo === m.modo);
+  const comparar = (nome, outra) => {
+    const to = taxa(outra);
+    if (t === null || to === null) return `${nome}: ${pct(to)}`;
+    const dif = t - to;
+    return `${nome}: ${pct(to)} <b style="color:${dif >= 0 ? "var(--vitoria)" : "var(--derrota)"}">(${dif >= 0 ? "+" : ""}${dif} p.p.)</b>`;
+  };
+  const porHeroi = [...agrupar(l, (p) => heroiDe(p)?.id).entries()]
+    .sort((a, b) => b[1].length - a[1].length || (taxa(b[1]) ?? 0) - (taxa(a[1]) ?? 0));
+  const porFuncao = agrupar(l, (p) => heroiDe(p)?.funcao);
+  const porFila = agrupar(l, "modo");
+  const irmaos = app.catalogo.mapas.filter((x) => x.modo === m.modo && x.id !== id);
+  const lancamento = m.lancamento ? new Date(m.lancamento + "T12:00").toLocaleDateString("pt-BR") : null;
+  return `
+  <div class="topo"><a class="botao" href="#/mapas">← Mapas</a>${filtrosHtml()}</div>
+  <section class="cabeca-mapa">
+    <img class="fundo" src="${m.imagem}" alt="">
+    <div>
+      <h1>${esc(m.nome)}</h1>
+      <div class="chips-info">
+        <span class="chip"><img src="${modo.icone}" alt="">${esc(modo.nome)}</span>
+        <span class="chip">${esc(m.pais)}</span>
+        ${lancamento ? `<span class="chip">Lançado em ${lancamento}</span>` : ""}
+        ${m.nome_en !== m.nome ? `<span class="chip">${esc(m.nome_en)}</span>` : ""}
+      </div>
+      <p>${esc(modo.descricao)}</p>
+    </div>
+  </section>
+  <section class="kpis">
+    <div class="painel kpi winrate">${anel(t)}<div><small>Winrate</small><div class="numero">${t ?? "—"}<em>${t === null ? "" : "%"}</em></div>
+      <div class="detalhe vde"><b>${vitorias(l)}V</b> · <i>${derrotas(l)}D</i> · ${l.length - vitorias(l) - derrotas(l)}E</div></div></div>
+    <div class="painel kpi"><small>Partidas</small><div class="numero">${l.length}</div>
+      <div class="detalhe">${[...porFila.entries()].map(([f, x]) => `${x.length} ${esc(f)}`).join(" · ") || "nunca jogado"}</div></div>
+    <div class="painel kpi"><small>Comparação</small><div class="detalhe" style="white-space:normal;line-height:1.7">
+      ${comparar("Geral", todas)}<br>${comparar(modo.nome, doModo)}</div></div>
+    <div class="painel kpi"><small>E / A / M</small><div class="numero" style="font-size:28px">${["eliminacoes", "assistencias", "mortes"].map((c) => (media(l, c) === null ? "—" : media(l, c).toFixed(1))).join(" / ")}</div><div class="detalhe">média por partida</div></div>
+    <div class="painel kpi"><small>Dano / Cura</small><div class="numero" style="font-size:28px">${fmt(media(l, "dano"))}<em> / ${fmt(media(l, "cura"))}</em></div><div class="detalhe">média por partida</div></div>
+  </section>
+  <div class="grade">
+    <div class="coluna">
+      <section class="painel"><header><h2>Suas partidas aqui</h2><small>${l.length} no filtro</small></header>
+        <div class="partidas">${l.map((p) => linhaPartida(p)).join("") || `<div class="vazio">Você ainda não jogou em ${esc(m.nome)} neste filtro.</div>`}</div></section>
+    </div>
+    <div class="coluna">
+      <section class="painel"><header><h2>Heróis neste mapa</h2></header>
+        ${porHeroi.length ? `<div class="herois-top" style="grid-template-columns:1fr">${porHeroi.map(([hid, x]) => cartaoHeroiTop(app.ref.heroi[hid], x)).join("")}</div>` : `<div class="vazio">Sem partidas.</div>`}</section>
+      <section class="painel"><header><h2>Por função</h2></header><div class="lista">
+        ${app.catalogo.funcoes.map((f) => itemBarra(f.icone, CORES_FUNCAO[f.id], f.nome, porFuncao.get(f.id) || [])).join("")}</div></section>
+      <section class="painel"><header><h2>Outros mapas de ${esc(modo.nome)}</h2></header>
+        <div class="lista">${irmaos.map((x) => { const lx = todas.filter((p) => mapaDe(p)?.id === x.id), tx = taxa(lx);
+          return `<a class="item" href="#/mapas/${x.id}" style="text-decoration:none">
+            <img src="${x.imagem}" alt="" style="width:30px;height:30px;border-radius:6px;object-fit:cover">
+            <div class="nome" style="margin:0">${esc(x.nome)}<span>${lx.length} jogo${lx.length === 1 ? "" : "s"}</span></div>
+            <div class="pct" style="color:${corTaxa(tx)}">${pct(tx)}</div></a>`; }).join("")}</div></section>
+    </div>
+  </div>`;
 }
 
 // ------------------------------------------------------------------ ajustes
@@ -524,16 +588,17 @@ async function salvarEdicao(id) {
 // ------------------------------------------------------------------ navegação e eventos
 
 const paginas = { dashboard: paginaDashboard, historico: paginaHistorico, herois: paginaHerois, mapas: paginaMapas, ajustes: paginaAjustes };
+const detalhes = { herois: paginaHeroi, mapas: paginaMapa };  // #/herois/<id>, #/mapas/<id>
 function rota() {
   const [, pagina = "dashboard", id] = location.hash.split("/");
-  return { pagina: paginas[pagina] || pagina === "herois" ? pagina : "dashboard", id };
+  return { pagina: paginas[pagina] ? pagina : "dashboard", id };
 }
 function desenhar() {
   if (!app.catalogo) return;
   const { pagina, id } = rota();
   document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("ativo", a.dataset.pagina === pagina));
   const foco = document.activeElement?.id;
-  document.getElementById("pagina").innerHTML = pagina === "herois" && id ? paginaHeroi(id) : (paginas[pagina] || paginaDashboard)();
+  document.getElementById("pagina").innerHTML = id && detalhes[pagina] ? detalhes[pagina](decodeURIComponent(id)) : paginas[pagina]();
   if (foco === "busca") { const b = document.getElementById("busca"); b.focus(); b.setSelectionRange(b.value.length, b.value.length); }
 }
 
