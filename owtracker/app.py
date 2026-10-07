@@ -63,7 +63,7 @@ def main():
     minimizado = "--minimizado" in sys.argv
     if ja_rodando():
         if not minimizado:
-            sistema.abrir_janela(URL)
+            sistema.abrir_janela(URL, esperar=True)  # esta cópia encerra em seguida
         return
 
     servico = Servico()

@@ -365,9 +365,17 @@ kbd { background: var(--painel-2); border: 1px solid var(--borda); border-bottom
 }
 @keyframes entra { from { transform: translateY(10px); opacity: 0; } }
 
+/* Janela estreita (ex.: encaixada em meia tela): a barra lateral vira uma
+   coluna só de ícones, em vez de sumir. */
 @media (max-width: 1100px) {
-  body { grid-template-columns: 1fr; }
-  .lateral { display: none; }
+  body { grid-template-columns: 64px 1fr; }
+  .lateral { padding: 16px 8px; align-items: center; }
+  .marca { padding: 4px 0 18px; }
+  .marca b, .nav a span, .monitor, .jogador div { display: none; }
+  .nav a { font-size: 0; justify-content: center; padding: 10px; }
+  .nav a svg { width: 20px; height: 20px; }
+  .jogador { padding: 8px 0 0; }
+  main { padding: 18px 16px 32px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .grade { grid-template-columns: 1fr; }
   .ao-vivo, .cabeca-heroi { grid-template-columns: auto 1fr; }
