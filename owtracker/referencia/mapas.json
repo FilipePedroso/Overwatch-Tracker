@@ -1,0 +1,312 @@
+[
+ {
+  "id": "antarctic-peninsula",
+  "nome": "Península Antártica",
+  "nome_en": "Antarctic Peninsula",
+  "modo": "control",
+  "pais": "Antártida",
+  "local_en": "Antarctica",
+  "lancamento": "2023-02-07",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Antarctic_Peninsula_Loading_Screen.png/640px-Antarctic_Peninsula_Loading_Screen.png?ca750"
+ },
+ {
+  "id": "busan",
+  "nome": "Busan",
+  "nome_en": "Busan",
+  "modo": "control",
+  "pais": "Coreia do Sul",
+  "local_en": "South Korea",
+  "lancamento": "2018-09-11",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Busan_Loading_Screen.png/640px-Busan_Loading_Screen.png?ae6de"
+ },
+ {
+  "id": "ilios",
+  "nome": "Ilios",
+  "nome_en": "Ilios",
+  "modo": "control",
+  "pais": "Grécia",
+  "local_en": "Greece",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Ilios.jpg/640px-Ilios.jpg?4db3e"
+ },
+ {
+  "id": "lijiang-tower",
+  "nome": "Torre Lijiang",
+  "nome_en": "Lijiang Tower",
+  "modo": "control",
+  "pais": "China",
+  "local_en": "Lijiang, China",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Lijiang_Tower_loading_screen.jpg/640px-Lijiang_Tower_loading_screen.jpg?8df04"
+ },
+ {
+  "id": "nepal",
+  "nome": "Nepal",
+  "nome_en": "Nepal",
+  "modo": "control",
+  "pais": "Nepal",
+  "local_en": "Nepal",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Nepal_loading_screen.jpg/640px-Nepal_loading_screen.jpg?a86f8"
+ },
+ {
+  "id": "oasis",
+  "nome": "Oásis",
+  "nome_en": "Oasis",
+  "modo": "control",
+  "pais": "Iraque",
+  "local_en": "Iraq",
+  "lancamento": "2017-01-03",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Oasis.jpg/640px-Oasis.jpg?66675"
+ },
+ {
+  "id": "samoa",
+  "nome": "Samoa",
+  "nome_en": "Samoa",
+  "modo": "control",
+  "pais": "Samoa",
+  "local_en": "Samoa",
+  "lancamento": "2023-10-10",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Samoa_Loading_Screen.png/640px-Samoa_Loading_Screen.png?8671a"
+ },
+ {
+  "id": "circuit-royal",
+  "nome": "Circuit Royal",
+  "nome_en": "Circuit Royal",
+  "modo": "escort",
+  "pais": "Mônaco",
+  "local_en": "Monte Carlo, Monaco",
+  "lancamento": "2022-04-26",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Circuit_Royal_%28Night%29_Loading_Screen.png/640px-Circuit_Royal_%28Night%29_Loading_Screen.png?d5b17"
+ },
+ {
+  "id": "dorado",
+  "nome": "Dorado",
+  "nome_en": "Dorado",
+  "modo": "escort",
+  "pais": "México",
+  "local_en": "Veracruz, Mexico",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Dorado_Night_Loading_Screen.png/640px-Dorado_Night_Loading_Screen.png?f1060"
+ },
+ {
+  "id": "havana",
+  "nome": "Havana",
+  "nome_en": "Havana",
+  "modo": "escort",
+  "pais": "Cuba",
+  "local_en": "Havana, Cuba",
+  "lancamento": "2019-05-07",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Havana.png/640px-Havana.png?80f18"
+ },
+ {
+  "id": "junkertown",
+  "nome": "Junkertown",
+  "nome_en": "Junkertown",
+  "modo": "escort",
+  "pais": "Austrália",
+  "local_en": "Central Australia",
+  "lancamento": "2017-09-17",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Junkertown_Morning_Loading_Screen.png/640px-Junkertown_Morning_Loading_Screen.png?f879f"
+ },
+ {
+  "id": "rialto",
+  "nome": "Rialto",
+  "nome_en": "Rialto",
+  "modo": "escort",
+  "pais": "Itália",
+  "local_en": "Venice, Italy",
+  "lancamento": "2018-05-03",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Rialto_Talon_Loading_Screen.png/640px-Rialto_Talon_Loading_Screen.png?46fe7"
+ },
+ {
+  "id": "route-66",
+  "nome": "Rota 66",
+  "nome_en": "Route 66",
+  "modo": "escort",
+  "pais": "Estados Unidos",
+  "local_en": "Deadlock Gorge, Arizona, United States",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Route_66.jpg/640px-Route_66.jpg?c6332"
+ },
+ {
+  "id": "shambali-monastery",
+  "nome": "Monastério de Shambali",
+  "nome_en": "Shambali Monastery",
+  "modo": "escort",
+  "pais": "Nepal",
+  "local_en": "Nepal",
+  "lancamento": "2022-12-06",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/ShambaliEscort.png/640px-ShambaliEscort.png?aed7d"
+ },
+ {
+  "id": "watchpoint-gibraltar",
+  "nome": "Observatório: Gibraltar",
+  "nome_en": "Watchpoint: Gibraltar",
+  "modo": "escort",
+  "pais": "Gibraltar",
+  "local_en": "Gibraltar",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Watchpoint_Gibraltar_Destroyed_Loading_Screen.png/640px-Watchpoint_Gibraltar_Destroyed_Loading_Screen.png?30dd6"
+ },
+ {
+  "id": "aatlis",
+  "nome": "Aatlis",
+  "nome_en": "Aatlis",
+  "modo": "flashpoint",
+  "pais": "Marrocos",
+  "local_en": "Morocco",
+  "lancamento": "2025-06-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Aatlis_loading_screen.png/640px-Aatlis_loading_screen.png?95509"
+ },
+ {
+  "id": "new-junk-city",
+  "nome": "Nova Junk City",
+  "nome_en": "New Junk City",
+  "modo": "flashpoint",
+  "pais": "Austrália",
+  "local_en": "Central Australia",
+  "lancamento": "2023-08-10",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/New_Junk_City_Loading_Screen.png/640px-New_Junk_City_Loading_Screen.png?8df8a"
+ },
+ {
+  "id": "suravasa",
+  "nome": "Suravasa",
+  "nome_en": "Suravasa",
+  "modo": "flashpoint",
+  "pais": "Índia",
+  "local_en": "India",
+  "lancamento": "2023-08-10",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Suravasa_Loading_Screen.png/640px-Suravasa_Loading_Screen.png?12f04"
+ },
+ {
+  "id": "blizzard-world",
+  "nome": "Blizzard World",
+  "nome_en": "Blizzard World",
+  "modo": "hybrid",
+  "pais": "Estados Unidos",
+  "local_en": "Irvine, California, United States",
+  "lancamento": "2018-01-23",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Blizzard_World.jpg/640px-Blizzard_World.jpg?11c3f"
+ },
+ {
+  "id": "eichenwalde",
+  "nome": "Eichenwalde",
+  "nome_en": "Eichenwalde",
+  "modo": "hybrid",
+  "pais": "Alemanha",
+  "local_en": "Outskirts of Stuttgart, Germany",
+  "lancamento": "2016-09-01",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Eichenwalde_Loading_Screen.png/640px-Eichenwalde_Loading_Screen.png?f61dd"
+ },
+ {
+  "id": "hollywood",
+  "nome": "Hollywood",
+  "nome_en": "Hollywood",
+  "modo": "hybrid",
+  "pais": "Estados Unidos",
+  "local_en": "Los Angeles, United States",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Hollywood_Loading_Screen.png/640px-Hollywood_Loading_Screen.png?a9387"
+ },
+ {
+  "id": "kings-row",
+  "nome": "King's Row",
+  "nome_en": "King's Row",
+  "modo": "hybrid",
+  "pais": "Reino Unido",
+  "local_en": "London, United Kingdom",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/King%27s_Row_concept.jpg/640px-King%27s_Row_concept.jpg?c9ef2"
+ },
+ {
+  "id": "midtown",
+  "nome": "Midtown",
+  "nome_en": "Midtown",
+  "modo": "hybrid",
+  "pais": "Estados Unidos",
+  "local_en": "Midtown Manhattan, New York, United States",
+  "lancamento": "2022-04-26",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/MidtownLoading.png/640px-MidtownLoading.png?57235"
+ },
+ {
+  "id": "neon-junction",
+  "nome": "Junção Neon",
+  "nome_en": "Neon Junction",
+  "modo": "hybrid",
+  "pais": "Japão",
+  "local_en": "Japan",
+  "lancamento": "2026-06-16",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/NeonJunction1.png/640px-NeonJunction1.png?9611d"
+ },
+ {
+  "id": "numbani",
+  "nome": "Numbani",
+  "nome_en": "Numbani",
+  "modo": "hybrid",
+  "pais": "Numbani",
+  "local_en": "Numbani (Africa) (in Nigeria)",
+  "lancamento": "2016-05-24",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Numbani_S13_Loading_Screen.png/640px-Numbani_S13_Loading_Screen.png?5eb75"
+ },
+ {
+  "id": "paraiso",
+  "nome": "Paraíso",
+  "nome_en": "Paraíso",
+  "modo": "hybrid",
+  "pais": "Brasil",
+  "local_en": "Rio de Janeiro, Brazil",
+  "lancamento": "2022-06-28",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Para%C3%ADso_Loading_Screen.png/640px-Para%C3%ADso_Loading_Screen.png?e85c9"
+ },
+ {
+  "id": "colosseo",
+  "nome": "Colosseo",
+  "nome_en": "Colosseo",
+  "modo": "push",
+  "pais": "Itália",
+  "local_en": "Rome, Italy",
+  "lancamento": "2022-04-26",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Colosseo_Talon_Loading_Screen.png/640px-Colosseo_Talon_Loading_Screen.png?47d37"
+ },
+ {
+  "id": "esperanca",
+  "nome": "Esperança",
+  "nome_en": "Esperança",
+  "modo": "push",
+  "pais": "Portugal",
+  "local_en": "Portugal",
+  "lancamento": "2022-10-04",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/PortugalPush.jpg/640px-PortugalPush.jpg?66280"
+ },
+ {
+  "id": "new-queen-street",
+  "nome": "Nova Queen Street",
+  "nome_en": "New Queen Street",
+  "modo": "push",
+  "pais": "Canadá",
+  "local_en": "Toronto, Canada",
+  "lancamento": "2022-04-26",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/New_Queen_Street_%28Dawn%29_Loading_Screen.png/640px-New_Queen_Street_%28Dawn%29_Loading_Screen.png?244c4"
+ },
+ {
+  "id": "runasapi",
+  "nome": "Runasapi",
+  "nome_en": "Runasapi",
+  "modo": "push",
+  "pais": "Peru",
+  "local_en": "Peru",
+  "lancamento": "2024-06-20",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Runasapi_2.jpg/640px-Runasapi_2.jpg?99281"
+ },
+ {
+  "id": "watchpoint-grimsvotn",
+  "nome": "Observatório: Grímsvötn",
+  "nome_en": "Watchpoint: Grímsvötn",
+  "modo": "escort",
+  "pais": "Islândia",
+  "local_en": "Iceland",
+  "lancamento": "2026-10-06",
+  "imagem_url": "https://overwatch.weirdgloop.org/images/thumb/Iceland_Concept.png/640px-Iceland_Concept.png?ead79"
+ }
+]

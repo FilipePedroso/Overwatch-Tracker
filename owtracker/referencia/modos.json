@@ -1,0 +1,37 @@
+[
+ {
+  "id": "control",
+  "nome": "Controle",
+  "nome_en": "Control",
+  "descricao": "As equipes disputam um ponto de controle; vence quem conquistar 2 de 3 rodadas.",
+  "icone_url": "https://overwatch.weirdgloop.org/images/thumb/Control.png/128px-Control.png?d34e0"
+ },
+ {
+  "id": "escort",
+  "nome": "Escolta",
+  "nome_en": "Escort",
+  "descricao": "O ataque escolta a carga por três pontos de verificação; a defesa tenta impedir.",
+  "icone_url": "https://overwatch.weirdgloop.org/images/thumb/Escort.png/128px-Escort.png?d0b62"
+ },
+ {
+  "id": "hybrid",
+  "nome": "Híbrido",
+  "nome_en": "Hybrid",
+  "descricao": "O ataque captura um ponto e depois escolta a carga até o destino.",
+  "icone_url": "https://overwatch.weirdgloop.org/images/thumb/Hybrid.png/128px-Hybrid.png?8f920"
+ },
+ {
+  "id": "push",
+  "nome": "Avanço",
+  "nome_en": "Push",
+  "descricao": "As equipes disputam o robô e o empurram em direção à base inimiga.",
+  "icone_url": "https://overwatch.weirdgloop.org/images/thumb/Push.png/128px-Push.png?a6771"
+ },
+ {
+  "id": "flashpoint",
+  "nome": "Ponto de Tumulto",
+  "nome_en": "Flashpoint",
+  "descricao": "Pontos de controle surgem pelo mapa; vence quem capturar três primeiro.",
+  "icone_url": "https://overwatch.weirdgloop.org/images/thumb/Flashpoint.png/128px-Flashpoint.png?4bf39"
+ }
+]

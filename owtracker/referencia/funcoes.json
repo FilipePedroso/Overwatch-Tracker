@@ -1,0 +1,117 @@
+{
+ "funcoes": [
+  {
+   "id": "tank",
+   "nome": "Tanque",
+   "nome_en": "Tank",
+   "descricao": "Heróis de tanque resistem ao dano e destroem posições fortificadas, como inimigos agrupados e gargalos estreitos. Quando você é um tanque, é você quem lidera a investida.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/blt29de38a72c3ea6e5/63055efed3da0846f3f4a347/Tank.svg"
+  },
+  {
+   "id": "support",
+   "nome": "Suporte",
+   "nome_en": "Support",
+   "descricao": "Heróis de suporte fortalecem seus aliados, pois são capazes de curá-los, protegê-los com escudos, aumentar seu poder de dano e imobilizar os inimigos. Como suporte, você é fundamental para a sobrevivência da sua equipe.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/blt28a65b324269d06b/63055efe1872995d912945be/Support.svg"
+  },
+  {
+   "id": "damage",
+   "nome": "Dano",
+   "nome_en": "Damage",
+   "descricao": "Heróis de dano são responsáveis por procurar, atacar e aniquilar inimigos, com uma ampla variedade de ferramentas, habilidades e estratégias. Embora perigosos, eles também são frágeis e precisam de apoio para sobreviver.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt9c12f249ac15c7ec/blt99f5a322d8ebb7d2/63055efe765dbe3289348da2/Damage.svg"
+  }
+ ],
+ "subfuncoes": [
+  {
+   "id": "stalwart",
+   "funcao": "tank",
+   "nome": "Robustez",
+   "nome_en": "Stalwart",
+   "descricao": "Concede resistência a repulsão e lentidão.",
+   "descricao_en": "Gain knockback and slow resistance.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blta4c3e206ad8a74d4/69cc4288654060000881e549/Stalwart.svg"
+  },
+  {
+   "id": "survivor",
+   "funcao": "support",
+   "nome": "Sobrevivência",
+   "nome_en": "Survivor",
+   "descricao": "Habilidades de movimentação iniciam a regeneração de vida passiva.",
+   "descricao_en": "Movement abilities start passive health regeneration.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blt041c4d83ae3287a0/69cc428843e962000864141a/Survivor.svg"
+  },
+  {
+   "id": "tactician",
+   "funcao": "support",
+   "nome": "Estratégia",
+   "nome_en": "Tactician",
+   "descricao": "Armazena excesso de carga da habilidade suprema.",
+   "descricao_en": "Store excess ultimate charge.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blt906428e0112461d2/69cc4288fe4fec0008a19052/Tactician.svg"
+  },
+  {
+   "id": "flanker",
+   "funcao": "damage",
+   "nome": "Flanqueamento",
+   "nome_en": "Flanker",
+   "descricao": "Kits médicos restauram mais vida.",
+   "descricao_en": "Health packs restore more health.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blt50cfb5504e16e801/69cc428880f5db0008566475/Flanker.svg"
+  },
+  {
+   "id": "sharpshooter",
+   "funcao": "damage",
+   "nome": "Artilharia",
+   "nome_en": "Sharpshooter",
+   "descricao": "Acertos críticos reduzem o tempo de recarga das suas habilidades de movimento.",
+   "descricao_en": "Critical hits reduce your movement ability cooldowns.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blt8caf99d96f16cb91/69cc42885d96c80008fac69c/Sharpshooter.svg"
+  },
+  {
+   "id": "specialist",
+   "funcao": "damage",
+   "nome": "Especialidade",
+   "nome_en": "Specialist",
+   "descricao": "Eliminar um inimigo aumenta a velocidade de recarga brevemente.",
+   "descricao_en": "Eliminating an enemy briefly increases reload speed.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blt289e9f8acb0b9479/69cc4288f66e9400087af437/Specialist.svg"
+  },
+  {
+   "id": "initiator",
+   "funcao": "tank",
+   "nome": "Incursão",
+   "nome_en": "Initiator",
+   "descricao": "Concede cura ao longo do tempo após usar uma habilidade de movimentação específica.",
+   "descricao_en": "Gain a heal over time after using a specified movement ability.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/bltbfcedaced54025d8/69cc4288f54857000812e819/Initiator.svg"
+  },
+  {
+   "id": "recon",
+   "funcao": "damage",
+   "nome": "Reconhecimento",
+   "nome_en": "Recon",
+   "descricao": "Causar dano a inimigos com menos da metade da vida os revela.",
+   "descricao_en": "Damaging enemies below half health reveals them.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blt29e4cb7dc666bbe4/69cc4288eb1d69000843727d/Recon.svg"
+  },
+  {
+   "id": "medic",
+   "funcao": "support",
+   "nome": "Restauração",
+   "nome_en": "Medic",
+   "descricao": "Curar aliados com sua arma também cura você.",
+   "descricao_en": "Healing allies with your weapon also heals you.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blt73ceffbef4364cb1/69cc4288f9e2070008cdd2ae/Medic.svg"
+  },
+  {
+   "id": "bruiser",
+   "funcao": "tank",
+   "nome": "Combate",
+   "nome_en": "Bruiser",
+   "descricao": "Concede resistência a acertos críticos. Aumenta a velocidade enquanto está com menos da metade da vida.",
+   "descricao_en": "Gain resistance to critical hits. Move faster while below half health.",
+   "icone_url": "https://blz-contentstack-images.akamaized.net/v3/assets/blt2477dcaf4ebd440c/blt8d23e7e22f53a72b/69cc4288f66e9400087af43b/Bruiser.svg"
+  }
+ ]
+}

@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+dados/
+capturas/
+ferramentas/.cache/
+# imagens da Blizzard: uso pessoal, não versionar
+owtracker/referencia/assets/
+# configurações locais do Claude Code
+.claude/
