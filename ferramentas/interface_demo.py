@@ -36,6 +36,8 @@ def partida_de_teste(s, print_do_tab):
     fala = [Linha("[FILIPE (SOMBRA)] Boop.", 800, 1030, 300, 18)]
     for t in range(3):
         detector.processar(fala, largura, altura, 1 + t, False)
+    # apertos de tecla simulados (o E repetido dentro da recarga conta uma vez só)
+    detector.teclas([("e", 3.2), ("e", 3.4), ("shift", 4.0), ("botao_direito", 5.0), ("e", 9.9)])
     tela = Tela(ocr, bgra, largura, altura, s.monitor.reconhecedor)
     detector.processar(ocr.ler(bgra, largura, altura), largura, altura, 10, True, tela=tela)
     registro, _ = detector.processar([Linha("[ATHENA] Vitória.", 800, 1030, 300, 18)], largura, altura, 12, False)

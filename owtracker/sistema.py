@@ -1,6 +1,7 @@
 """Integração com o Windows: iniciar com o sistema e abrir a janela do app."""
 
 import ctypes
+import json
 import os
 import subprocess
 import sys
@@ -27,10 +28,13 @@ def abrir_janela(url, esperar=False):
     """Abre a interface numa janela de aplicativo (Edge sem abas nem barra de
     endereço), ou traz para frente a que já estiver aberta.
 
-    O Edge lembra a última posição da janela (inclusive "maximizada com meia
-    tela") e ignora o tamanho pedido; por isso a janela nova é ajustada pelo
-    Windows assim que aparece: centralizada, num tamanho confortável.
-    esperar=True aguarda esse ajuste (para quem vai encerrar logo em seguida).
+    A janela usa um perfil do Edge só dela (dados/janela-edge): assim cada
+    abertura sobe um Edge próprio, que respeita o tamanho pedido (um Edge já
+    aberto ignoraria o tamanho e usaria o padrão dele, meia tela).
+    O tamanho é o da última vez (ver lembrar_tamanho_da_janela) ou,
+    na primeira vez, o padrão centralizado. Nada é forçado depois que a janela
+    aparece: você pode mexer nela à vontade.
+    esperar=True aguarda a janela aparecer (para quem vai encerrar logo em seguida).
     Sem o Edge, usa o navegador padrão."""
     abertas = _janelas_do_app()
     if abertas:
@@ -40,24 +44,25 @@ def abrir_janela(url, esperar=False):
     if not edge:
         webbrowser.open(url)
         return
-    x, y, largura, altura = _retangulo_padrao()
+    x, y, largura, altura, maximizada = _tamanho_lembrado() or (*_retangulo_padrao(), False)
     escala = user32.GetDpiForSystem() / 96  # o Edge recebe o tamanho sem a escala do Windows
-    subprocess.Popen([str(edge), f"--app={url}",
-                      f"--window-size={int(largura / escala)},{int(altura / escala)}",
-                      f"--window-position={int(x / escala)},{int(y / escala)}"],
-                     creationflags=subprocess.DETACHED_PROCESS)
-    ajuste = threading.Thread(target=_ajustar_quando_abrir, args=((x, y, largura, altura),),
-                              daemon=True, name="janela")
-    ajuste.start()
+    comando = [str(edge), f"--app={url}", f"--user-data-dir={PERFIL_EDGE}",
+               "--no-first-run", "--no-default-browser-check",
+               f"--window-size={int(largura / escala)},{int(altura / escala)}",
+               f"--window-position={int(x / escala)},{int(y / escala)}"]
+    subprocess.Popen(comando, creationflags=subprocess.DETACHED_PROCESS)
+    frente = threading.Thread(target=_frente_quando_abrir, args=(maximizada,), daemon=True, name="janela")
+    frente.start()
     if esperar:
-        ajuste.join()
+        frente.join()
 
 
 # ---------------------------------------------------------------- janela (Win32)
 
 TITULO_JANELA = "OW Tracker"  # <title> da interface = título da janela do Edge
+PERFIL_EDGE = RAIZ_PROJETO / "dados" / "janela-edge"  # perfil do Edge só da janela do app
 SW_RESTORE = 9
-SWP_NOZORDER = 0x0004
+SW_MAXIMIZE = 3
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 _ENUMERAR = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -69,14 +74,13 @@ user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.SetForegroundWindow.argtypes = [wintypes.HWND]
 user32.IsZoomed.argtypes = [wintypes.HWND]
 user32.IsIconic.argtypes = [wintypes.HWND]
+user32.IsWindow.argtypes = [wintypes.HWND]
 user32.BringWindowToTop.argtypes = [wintypes.HWND]
 user32.GetForegroundWindow.restype = wintypes.HWND
 user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.c_void_p]
 user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
-                                ctypes.c_int, ctypes.c_int, wintypes.UINT]
 user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT]
 
 
@@ -126,27 +130,63 @@ def _trazer_para_frente(hwnd):
             user32.AttachThreadInput(nosso, deles, False)
 
 
-def _ajustar_quando_abrir(retangulo, limite=10.0, vigia=4.0):
-    """Espera a janela nova aparecer e a põe no tamanho/posição padrão.
-
-    O Edge reaplica a posição salva (ex.: maximizada) um instante DEPOIS de
-    mostrar a janela; por isso, nos primeiros segundos, o ajuste é refeito
-    sempre que ele mexer. Depois disso, a janela é sua para mover à vontade."""
+def _frente_quando_abrir(maximizar=False, limite=15.0):
+    """Espera a janela nova aparecer, maximiza (se estava maximizada da última
+    vez; o Edge ignora --start-maximized nesse modo) e traz para frente. Uma
+    ação só: depois disso a janela é sua."""
     fim = time.monotonic() + limite
     while time.monotonic() < fim:
         abertas = _janelas_do_app()
         if abertas:
-            hwnd = abertas[0]
-            fim_vigia = time.monotonic() + vigia
-            _trazer_para_frente(hwnd)
-            while time.monotonic() < fim_vigia:
-                if _retangulo(hwnd) != retangulo or user32.IsZoomed(hwnd):
-                    user32.ShowWindow(hwnd, SW_RESTORE)  # tira do "maximizado" lembrado pelo Edge
-                    user32.SetWindowPos(hwnd, None, *retangulo, SWP_NOZORDER)
-                time.sleep(0.1)
-            _trazer_para_frente(hwnd)
+            if maximizar:
+                user32.ShowWindow(abertas[0], SW_MAXIMIZE)
+            for _ in range(10):  # a abertura demora um pouco: insiste até ficar na frente
+                _trazer_para_frente(abertas[0])
+                if user32.GetForegroundWindow() == abertas[0]:
+                    return
+                time.sleep(0.3)
             return
-        time.sleep(0.2)
+        time.sleep(0.1)
+
+
+def lembrar_tamanho_da_janela(parar):
+    """Roda no serviço: a cada 2 s, se a janela do app estiver aberta, anota
+    tamanho/posição/maximizada para a próxima abertura (custo: ~1 ms)."""
+    anterior = None
+    while not parar.wait(2):
+        abertas = _janelas_do_app()
+        if not abertas or user32.IsIconic(abertas[0]):
+            continue
+        maximizada = bool(user32.IsZoomed(abertas[0]))
+        # maximizada: mantém o tamanho "normal" de antes, para quando sair do maximizado
+        retangulo = anterior[:4] if maximizada and anterior else _retangulo(abertas[0])
+        atual = (*retangulo, maximizada)
+        if atual != anterior:
+            _lembrar_tamanho(atual)
+            anterior = atual
+
+
+ARQUIVO_JANELA = RAIZ_PROJETO / "dados" / "janela.json"
+
+
+def _lembrar_tamanho(tamanho):
+    try:
+        ARQUIVO_JANELA.write_text(json.dumps(tamanho), "utf-8")
+    except OSError:
+        pass
+
+
+def _tamanho_lembrado():
+    """(x, y, largura, altura, maximizada) da última vez, se ainda couber na tela."""
+    try:
+        x, y, largura, altura, maximizada = json.loads(ARQUIVO_JANELA.read_text("utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    area = wintypes.RECT()
+    user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(area), 0)  # SPI_GETWORKAREA
+    cabe = (largura >= 600 and altura >= 400 and x + 100 < area.right and y >= area.top - 20
+            and x + largura > area.left + 100 and y + 100 < area.bottom)
+    return (x, y, largura, altura, maximizada) if cabe else None
 
 
 def _retangulo(hwnd):

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 
 from . import catalogo, dados
 from .placar import ler_placar, ler_times, tela_do_placar
+from .habilidades import rastreaveis
 from .retratos import identificar
 
 TAMANHO_MIN_RESULTADO = 0.035  # altura mínima de VITÓRIA/DERROTA grande, em fração da tela
@@ -32,6 +33,8 @@ MESMO_TAB = 15                 # s: leituras do placar tão próximas são o mes
 PARTIDA_PARADA = 900           # s sem novidade: a partida em andamento é descartada
 LEITURAS_MAPA_NOVO = 3         # leituras do Tab para aceitar um mapa fora do catálogo
 INTERVALO_TIMES = 2.5          # s entre leituras completas dos dois times no Tab
+TEMPO_MORTO = 3.5              # s sem contar habilidades depois de ver "RESSURGIR EM"
+                               # (a tela inteira é lida a cada ~3 s)
 # Telas que não são partida (texto compactado, ver compactar()).
 TEXTOS_FORA_DE_PARTIDA = ("campodetreinamento", "practicerange")
 
@@ -41,6 +44,13 @@ CONFUSOES_OCR = str.maketrans({"l": "i", "1": "i", "0": "o"})
 # BattleTags não têm espaço, então o nome é uma palavra só, colada ao "(".
 RE_FALA = re.compile(r"(\w{2,16})\s*\(\s*([^()\[\]]{2,16})")
 RE_TROCA = re.compile(r"(\w{2,16})\s+trocou\s+para\s+(.{2,20}?)\s*\(\s*era", re.IGNORECASE)
+
+
+def morto(texto):
+    """'RESSURGIRÁ EM' (contagem para voltar); o OCR costuma ler torto,
+    tipo 'RISSURGIM[M', então a comparação é aproximada."""
+    t = compactar(texto)
+    return "ssurg" in t or difflib.SequenceMatcher(None, t, compactar("ressurgira em")).ratio() >= 0.7
 
 
 def compactar(texto):
@@ -201,6 +211,13 @@ class Partida:
     tab_competitivo: bool = None  # None = Tab não visto; o cabeçalho diz se é Competitivo
     mapas_tab: Counter = field(default_factory=Counter)        # mapa lido no cabeçalho do Tab
     mapas_desconhecidos: Counter = field(default_factory=Counter)  # idem, fora do catálogo
+    # Uso de habilidades (ver Detector.teclas)
+    heroi_atual: str = None                                    # id do seu herói agora
+    usos: Counter = field(default_factory=Counter)            # (heroi_id, habilidade_id) -> usos
+    ultimo_uso: dict = field(default_factory=dict)            # (heroi_id, tecla) -> instante
+    apertos_sem_heroi: list = field(default_factory=list)     # antes de saber o herói
+    q_em: float = float("-inf")                                # último Q apertado
+    suprema_pct: int = None                                    # último % da suprema lido no HUD
 
     def mapa_final(self):
         """O cabeçalho do Tab ("ESCOLTA | GRÍMSVÖTN") é a fonte mais confiável.
@@ -251,6 +268,7 @@ class Registro:
     herois_jogados: list
     placar: dict = field(default_factory=dict)  # E/A/M/dano/cura/mitigado (último Tab)
     times: dict = None  # aliados e inimigos lidos no Tab (ver placar.ler_times)
+    habilidades: list = field(default_factory=list)  # [{heroi_id, habilidade_id, usos}]
 
 
 class Detector:
@@ -261,6 +279,7 @@ class Detector:
         self.ultimo_fim = float("-inf")
         self.ultima_novidade = 0.0     # última vez que a partida em andamento mudou
         self.fora_de_partida = False   # no Campo de Treinamento
+        self.morto_ate = float("-inf")  # "RESSURGIR EM" na tela: apertos não contam
         self.placar_registrado = {}    # placar gravado com a última partida
         self.pos_fim = LeiturasPlacar()  # Tabs abertos logo depois do resultado
         self.biblioteca = None           # retratos.Biblioteca (o monitor entrega)
@@ -284,7 +303,77 @@ class Detector:
             return None
         herois = p.herois_do_jogador(self.nome_jogador)
         return {"heroi": p.mais_votado(herois), "mapa": p.mapa_final(),
-                "modo": p.modo_final(), "placar": p.placar.final()}
+                "modo": p.modo_final(), "placar": p.placar.final(),
+                "habilidades": self._usos_da_partida(p)}
+
+    # ------------------------------------------------------------ habilidades
+
+    def teclas(self, apertos):
+        """Recebe os apertos de tecla [(tecla, instante)] (ver entradas.py) e
+        conta os usos de habilidade do seu herói atual. Um aperto só conta se:
+        você está numa partida, vivo, com o herói conhecido, a tecla é de uma
+        habilidade contável dele e ela já saiu da recarga desde o último uso.
+        O Q não conta aqui: a suprema é confirmada pelo % do HUD (_suprema)."""
+        p = self.partida
+        for tecla, quando in apertos:
+            if self.fora_de_partida or quando < self.ignorar_ate or quando < self.morto_ate:
+                continue
+            if tecla == "q":
+                p.q_em = quando
+            elif not p.heroi_atual:
+                p.apertos_sem_heroi.append((tecla, quando))  # conta quando o herói aparecer
+                del p.apertos_sem_heroi[:-200]
+            else:
+                self._contar_aperto(p, p.heroi_atual, tecla, quando)
+
+    def _contar_aperto(self, p, heroi_id, tecla, quando):
+        habilidade = next((h for h in rastreaveis(heroi_id) if h["tecla"] == tecla), None)
+        if not habilidade or not habilidade["recarga"]:
+            return
+        anterior = p.ultimo_uso.get((heroi_id, tecla))
+        # Margem de 15%: vantagens e subfunções reduzem um pouco a recarga.
+        if anterior is None or quando - anterior >= habilidade["recarga"] * 0.85:
+            p.usos[(heroi_id, habilidade["id"])] += 1
+            p.ultimo_uso[(heroi_id, tecla)] = quando
+
+    def _heroi_do_jogador(self, heroi_nome):
+        """Uma fala sua nas legendas: esse é o seu herói agora."""
+        heroi = catalogo.heroi(heroi_nome)
+        if not heroi:
+            return
+        p = self.partida
+        primeira_vez = p.heroi_atual is None
+        p.heroi_atual = heroi["id"]
+        if primeira_vez:  # apertos do começo da partida, antes de saber o herói
+            for tecla, quando in p.apertos_sem_heroi:
+                self._contar_aperto(p, heroi["id"], tecla, quando)
+            p.apertos_sem_heroi.clear()
+
+    def _suprema(self, linhas, largura, altura, agora):
+        """% da suprema no HUD (centro, embaixo). Ela foi usada quando o % estava
+        quase cheio, caiu bem, e você tinha apertado Q pouco antes (sem o Q,
+        a queda é troca de herói, não uso)."""
+        p = self.partida
+        for linha in linhas:
+            texto = linha.texto.strip().rstrip("%")
+            centro_x = linha.x + linha.largura / 2
+            if not (texto.isdigit() and len(texto) <= 3 and abs(centro_x / largura - 0.495) < 0.03
+                    and abs(linha.y / altura - 0.844) < 0.02):
+                continue
+            pct = int(texto)
+            if pct > 100:
+                return
+            if p.suprema_pct is not None and p.suprema_pct >= 85 and pct <= 30 \
+                    and agora - p.q_em <= 10 and p.heroi_atual:
+                suprema = next((h for h in rastreaveis(p.heroi_atual) if h["tecla"] == "q"), None)
+                if suprema:
+                    p.usos[(p.heroi_atual, suprema["id"])] += 1
+            p.suprema_pct = pct
+            return
+
+    @staticmethod
+    def _usos_da_partida(p):
+        return [{"heroi_id": h, "habilidade_id": a, "usos": n} for (h, a), n in sorted(p.usos.items())]
 
     def processar(self, linhas, largura, altura, agora, tela_inteira=True, tela=None):
         """Recebe as linhas do OCR de um quadro (ou só da faixa de legendas).
@@ -341,9 +430,15 @@ class Detector:
         for linha in linhas:
             for nome, heroi in self._falas(linha.texto):
                 self.partida.falas[nome.upper()][heroi] += 1
+                if self.nome_jogador and mesmo_nome(nome, self.nome_jogador):
+                    self._heroi_do_jogador(heroi)
                 mensagens.append(f"Fala: {nome} ({heroi})")
 
+        self._suprema(linhas, largura, altura, agora)
         if tela_inteira:
+            # "RESSURGIRÁ EM" no canto superior direito: você está morto.
+            if any(l.x > largura * 0.7 and l.y < altura * 0.08 and morto(l.texto) for l in linhas):
+                self.morto_ate = agora + TEMPO_MORTO
             mensagens += self._mapa_e_modo(linhas, agora)
             if tela_do_placar(linhas, altura):
                 mensagens += self._tab(linhas, largura, altura, agora, tela)
@@ -495,6 +590,7 @@ class Detector:
             herois_jogados=[h for h, n in herois.most_common() if n >= 2],
             placar=p.placar.final(),
         )
+        registro.habilidades = self._usos_da_partida(p)
         if p.times:
             registro.times = self._identificar(p.times, registro.heroi, p.falas, registro.placar)
         self.contexto_fim = (registro.heroi, p.falas)

@@ -104,6 +104,12 @@ class _Manipulador(BaseHTTPRequestHandler):
             m = re.fullmatch(r"/api/partidas/(\d+)/jogadores", rota)
             if m:
                 return self._json(s.jogadores(int(m.group(1))))
+            m = re.fullmatch(r"/api/partidas/(\d+)/habilidades", rota)
+            if m:
+                return self._json(s.habilidades_da_partida(int(m.group(1))))
+            m = re.fullmatch(r"/api/herois/([\w-]+)/habilidades", rota)
+            if m:
+                return self._json(s.habilidades_do_heroi(m.group(1)))
             m = re.fullmatch(r"/api/retratos/(\d+)/(aliados|inimigos)/([0-4])\.png", rota)
             if m:
                 png = s.retrato(int(m.group(1)), m.group(2), int(m.group(3)))

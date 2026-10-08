@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import catalogo, dados, retratos, sistema
+from . import catalogo, dados, habilidades, retratos, sistema
 from .banco import COLUNAS_PLACAR, Banco
 from .monitor import PASTA_DIAGNOSTICO, Monitor, salvar_config
 
@@ -30,6 +30,7 @@ class Servico:
         self.aviso = None            # última notícia para a interface: {texto, quando}
         self.ultimo_auto_id = None   # recebe o placar final do Tab aberto depois do fim
         self._times_pendentes = None  # times da partida pendente (não vão para o JSON do estado)
+        self._habilidades_pendentes = None
         self.monitor = Monitor(
             avisar=self._ao_status, ao_registrar=self._ao_registrar,
             ao_atualizar=self._ao_parcial, ao_corrigir_placar=self._ao_placar_final)
@@ -59,6 +60,7 @@ class Servico:
                 self.pendente = {"heroi": r.heroi, "mapa": r.mapa, "modo": r.modo, "placar": r.placar,
                                  "observacao": _observacao(r.herois_jogados)}
                 self._times_pendentes = r.times
+                self._habilidades_pendentes = r.habilidades
                 self._noticia("A partida terminou, mas não li o resultado: confirme no app.")
                 return
             self.ultimo_auto_id = self.banco.registrar(
@@ -66,6 +68,8 @@ class Servico:
                 observacao=_observacao(r.herois_jogados), placar=r.placar)
             if r.times:
                 self.banco.salvar_jogadores(self.ultimo_auto_id, r.times)
+            if r.habilidades:
+                self.banco.salvar_habilidades(self.ultimo_auto_id, r.habilidades)
             self.versao += 1
             self._noticia(f"Registrada: {r.resultado} · {r.heroi} · {r.mapa}")
 
@@ -94,9 +98,19 @@ class Servico:
         with self.trava:
             partidas = self.banco.listar_completo()
             com_times = self.banco.partidas_com_jogadores()
+            com_habilidades = self.banco.partidas_com_habilidades()
         for p in partidas:
             p["tem_times"] = p["id"] in com_times
+            p["tem_habilidades"] = p["id"] in com_habilidades
         return partidas
+
+    def habilidades_da_partida(self, id_partida):
+        with self.trava:
+            return self.banco.habilidades_da_partida(id_partida)
+
+    def habilidades_do_heroi(self, heroi_id):
+        with self.trava:
+            return self.banco.habilidades_do_heroi(heroi_id)
 
     def jogadores(self, id_partida):
         with self.trava:
@@ -157,12 +171,15 @@ class Servico:
         with self.trava:
             p, self.pendente = self.pendente, None
             times, self._times_pendentes = self._times_pendentes, None
+            usos, self._habilidades_pendentes = self._habilidades_pendentes, None
             if p and resultado in dados.RESULTADOS:
                 self.ultimo_auto_id = self.banco.registrar(
                     p["heroi"], p["mapa"], p["modo"], resultado, origem="auto",
                     observacao=p["observacao"], placar=p["placar"])
                 if times:
                     self.banco.salvar_jogadores(self.ultimo_auto_id, times)
+                if usos:
+                    self.banco.salvar_habilidades(self.ultimo_auto_id, usos)
                 self.versao += 1
 
     def descartar_andamento(self):
@@ -184,12 +201,19 @@ class Servico:
 
 
 PASTA_CODIGO = Path(__file__).resolve().parent
+ATUALIZACAO_ASSENTADA = 20  # s sem nenhum arquivo mudar antes de avisar
 
 
 def codigo_mudou_desde(instante):
-    """O código Python do app foi atualizado depois que ele abriu? A interface
-    (web/) é lida do disco a cada F5, mas o serviço só usa código novo ao reiniciar."""
-    return any(arquivo.stat().st_mtime > instante + 1 for arquivo in PASTA_CODIGO.glob("*.py"))
+    """O app foi atualizado depois que abriu e a atualização já terminou?
+
+    Conta o código Python e o catálogo (o reconhecimento durante a partida só
+    os relê ao reiniciar; a interface web/ é relida a cada F5). Só avisa quando
+    nada mudou nos últimos ATUALIZACAO_ASSENTADA segundos: reiniciar no meio de
+    uma atualização aplicaria só parte dela (e pediria um segundo reinício)."""
+    arquivos = [*PASTA_CODIGO.glob("*.py"), *catalogo.PASTA.glob("*.json")]
+    mais_recente = max(a.stat().st_mtime for a in arquivos)
+    return mais_recente > instante + 1 and time.time() - mais_recente > ATUALIZACAO_ASSENTADA
 
 
 def _observacao(herois_jogados):
@@ -248,6 +272,9 @@ def catalogo_web():
                 "recarga": a["recarga"],
                 "icone": imagem(f"habilidades/{h['id']}__{a['id']}", a["icone_url"] or a.get("imagem_wiki_url")),
             } for a in h["habilidades"]],
+            # Habilidades contadas pelas teclas (ver habilidades.py)
+            "rastreaveis": [{**r, "tecla_nome": habilidades.NOME_DA_TECLA[r["tecla"]]}
+                            for r in habilidades.rastreaveis(h["id"])],
         } for h in c["herois"]],
         "modos_fila": dados.MODOS,
         "resultados": dados.RESULTADOS,

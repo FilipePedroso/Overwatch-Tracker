@@ -442,3 +442,27 @@ kbd { background: var(--painel-2); border: 1px solid var(--borda); border-bottom
   .ao-vivo, .cabeca-heroi { grid-template-columns: auto 1fr; }
   .placar-vivo, .vitais { grid-column: 1 / -1; }
 }
+
+/* uso de habilidades */
+.usos-vivo { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.usos-vivo span { display: inline-flex; align-items: center; gap: 6px; background: rgba(13,18,28,.78); border: 1px solid var(--borda); border-radius: 8px; padding: 4px 10px 4px 4px; }
+.usos-vivo img { width: 24px; height: 24px; border-radius: 6px; background: #0e131d; padding: 3px; }
+.usos-vivo b { font: 700 18px "Barlow Condensed"; }
+.usos { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; padding: 0 16px 16px; }
+.usos-heroi + .usos-heroi { border-top: 1px solid var(--borda); padding-top: 12px; }
+.usos-titulo { display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; font: 600 16px "Barlow Condensed"; text-transform: uppercase; }
+.usos-titulo img { width: 28px; height: 28px; border-radius: 6px; }
+.uso { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; background: var(--painel-2); border-radius: 8px; padding: 10px 12px; }
+.uso.zero { opacity: .45; }
+.uso-icone img { width: 44px; height: 44px; border-radius: 8px; background: #0e131d; padding: 6px; }
+.uso-icone:empty { width: 44px; height: 44px; border-radius: 8px; background: #0e131d; }
+.uso-texto { min-width: 0; }
+.uso-texto b { display: block; font: 600 16px "Barlow Condensed"; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uso-texto small { color: var(--texto-3); font-size: 12px; }
+.uso-texto kbd { margin-right: 4px; }
+.uso-extra { display: block; margin-top: 2px; }
+.uso-numero { text-align: right; }
+.uso-numero .numero { font-size: 28px; line-height: 1; }
+.uso-numero small { color: var(--texto-3); font-size: 11px; }
+.mini-barras { display: flex; align-items: flex-end; gap: 2px; height: 22px; margin-top: 6px; }
+.mini-barras i { flex: 1; max-width: 10px; background: var(--laranja); opacity: .75; border-radius: 2px 2px 0 0; }

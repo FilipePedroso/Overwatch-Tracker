@@ -18,6 +18,7 @@ from . import digitos, janelas, retratos
 from .banco import PASTA_DADOS
 from .digitos import segmentar
 from .captura import Captura, jogo_em_foco
+from .entradas import Entradas
 from .detector import Detector
 from .imagem import ampliar, isolar_texto_branco, recortar, reduzir
 from .ocr import OCR, Linha
@@ -132,6 +133,7 @@ class Monitor(threading.Thread):
         self.reconhecedor = digitos.carregar(ARQUIVO_DIGITOS)
         self.biblioteca = retratos.Biblioteca()  # retratos de heróis já identificados
         self.detector.biblioteca = self.biblioteca
+        self.entradas = Entradas()  # teclas de habilidade (só com o jogo em foco)
         self._parar = threading.Event()
         self._ultimo_print = 0.0
         self._ultimo_texto = None
@@ -159,6 +161,7 @@ class Monitor(threading.Thread):
             self.avisar(f"Modo automático indisponível: {erro}")
             return
         captura = Captura()
+        self.entradas.start()
         detector = self.detector
         estado_anterior = None
         proxima_legenda = proxima_inteira = 0.0
@@ -170,6 +173,9 @@ class Monitor(threading.Thread):
                     self._descartar = False
                     detector.descartar_partida()
                     self._avisar_parcial()
+                apertos = self.entradas.pegar()
+                if apertos:
+                    detector.teclas(apertos)
                 jogo = jogo_em_foco()
                 if not jogo:
                     if estado_anterior != "fora":
@@ -231,6 +237,7 @@ class Monitor(threading.Thread):
                 continue
             self._parar.wait(VERIFICAR_TAB)
         captura.fechar()
+        self.entradas.parar()
         digitos.salvar(self.reconhecedor, ARQUIVO_DIGITOS)
         self.biblioteca.salvar()
 

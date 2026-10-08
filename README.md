@@ -94,6 +94,27 @@ só com o Overwatch em primeiro plano:
   Registro manual e só falta você clicar no resultado.
 - Para calibrar sem jogar: `python -m owtracker.reproduzir dados/diagnostico.log FILIPE`.
 
+## Uso de habilidades
+
+Com o seu herói conhecido (pela legenda), o app conta quantas vezes você usou
+cada habilidade e mostra isso na página da partida ("Suas habilidades"), na
+página do herói ("Uso de habilidades": média por partida, total, máximo e as
+últimas partidas) e no cartão da partida em andamento.
+
+- As teclas são lidas de forma passiva (`GetAsyncKeyState`, `entradas.py`), só
+  com o jogo em primeiro plano. Nada é enviado ao jogo e a memória dele não é lida.
+- Teclas consideradas: Shift, E, Q, botão direito e R, nas posições padrão do
+  jogo. Quem mudou as teclas no jogo terá contagens erradas.
+- Um aperto só conta se a habilidade já saiu da recarga (85% do tempo base,
+  porque vantagens e subfunções reduzem um pouco a recarga). Assim, apertar
+  várias vezes seguidas conta um uso só.
+- Não conta com o chat aberto (Enter… Enter/Esc) nem morto ("RESSURGIRÁ EM").
+- A suprema conta quando o % do HUD estava quase cheio e caiu, com um Q
+  apertado pouco antes. Sem o Q, a queda é troca de herói.
+- O que conta como habilidade fica em `habilidades.py`. Ficam de fora: tiros
+  (o botão direito da Lifeweaver, por exemplo), habilidades sem recarga ou com
+  recarga muito curta, e barreiras de segurar (Reinhardt, Brigitte...).
+
 ## Modo diagnóstico (ligado por padrão nesta fase)
 
 Para calibrar com as telas reais do jogo, o app guarda:
@@ -140,6 +161,8 @@ owtracker/
   captura.py   captura DXGI (tela cheia) com reserva GDI; acha a janela do jogo
   ocr.py       OCR do Windows (Windows.Media.Ocr) via ctypes
   placar.py    leitura do placar (Tab): acha a sua linha e as colunas
+  habilidades.py  habilidades contáveis de cada herói (tecla e recarga)
+  entradas.py  leitura passiva das teclas de habilidade
   digitos.py   reconhecedor de dígitos próprio (completa o que o OCR pula)
   com.py       mini camada para chamar COM/WinRT
   imagem.py    recorte e redução de imagens

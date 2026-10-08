@@ -26,6 +26,8 @@ const app = {
   versao: -1,
   ultimoAviso: null,
   jogadores: {},  // times de cada partida, carregados sob demanda
+  habilidadesPartida: {},  // uso de habilidades por partida (sob demanda)
+  habilidadesHeroi: {},    // uso de habilidades por herói (sob demanda)
   filtros: carregarFiltros(),
   ref: {},  // índices do catálogo
 };
@@ -241,6 +243,7 @@ function blocoAoVivo() {
         ${f ? `<span><img src="${f.icone}" alt="">${esc(f.nome)} · ${esc(s.nome)}</span>` : ""}
         <span>${esc(p.modo)}</span>
       </div>
+      ${usosAoVivo(p.habilidades)}
     </div>
     <div class="placar-vivo">
       <div><div class="numero">${v("eliminacoes")}</div><small>Elim.</small></div>
@@ -395,6 +398,7 @@ function paginaHeroi(id) {
   </section>
   <div class="grade">
     <div class="coluna">
+      ${blocoHabilidadesHeroi(h)}
       <section class="painel"><header><h2>Habilidades</h2></header><div class="habilidades">${habs.map(habilidadeHtml).join("")}</div></section>
       ${vantagens.length ? `<section class="painel"><header><h2>Vantagens</h2><small>escolhidas durante a partida</small></header><div class="habilidades">${vantagens.map(habilidadeHtml).join("")}</div></section>` : ""}
     </div>
@@ -458,6 +462,81 @@ function carregarJogadores(id) {
   return null;
 }
 
+// ------------------------------------------------------------------ uso de habilidades
+
+function habilidadeDe(heroi, id) {
+  const r = heroi.rastreaveis.find((a) => a.id === id) || {};
+  const a = heroi.habilidades.find((x) => x.id === id) || {};
+  return { id, nome: r.nome || a.nome || id, icone: a.icone, tecla: r.tecla_nome, recarga: r.recarga, tipo: r.tipo || a.tipo };
+}
+
+function usosAoVivo(lista) {
+  // Contadores no cartão da partida em andamento (herói atual primeiro).
+  if (!lista?.length) return "";
+  return `<div class="usos-vivo">${lista.map((u) => {
+    const h = app.ref.heroi[u.heroi_id];
+    if (!h) return "";
+    const a = habilidadeDe(h, u.habilidade_id);
+    return `<span title="${esc(`${h.nome}: ${a.nome}`)}">${a.icone ? `<img src="${a.icone}" alt="">` : ""}<b>${u.usos}</b></span>`;
+  }).join("")}</div>`;
+}
+
+function carregarSobDemanda(cache, chave, url) {
+  if (app[cache][chave] !== undefined) return app[cache][chave];
+  app[cache][chave] = null;  // carregando
+  api.ler(url).then((dados) => { app[cache][chave] = dados; desenhar(); });
+  return null;
+}
+
+function cartaoHabilidade(a, numero, rotulo, extra = "") {
+  return `<div class="uso ${numero === 0 ? "zero" : ""}">
+    <div class="uso-icone">${a.icone ? `<img src="${a.icone}" alt="">` : ""}</div>
+    <div class="uso-texto"><b>${esc(a.nome)}</b>
+      <small>${a.tecla ? `<kbd>${esc(a.tecla)}</kbd>` : ""}${a.recarga ? ` recarga ${String(a.recarga).replace(".", ",")} s` : a.tipo === "suprema" ? " suprema" : ""}</small>${extra}</div>
+    <div class="uso-numero"><div class="numero">${numero}</div><small>${rotulo}</small></div>
+  </div>`;
+}
+
+function blocoHabilidadesPartida(p) {
+  if (!p.tem_habilidades) {
+    return `<section class="painel"><header><h2>Suas habilidades</h2></header>
+      <div class="vazio">O uso de habilidades não foi registrado nesta partida (o recurso é mais novo que ela).</div></section>`;
+  }
+  const lista = carregarSobDemanda("habilidadesPartida", p.id, `/api/partidas/${p.id}/habilidades`);
+  if (!lista) return `<section class="painel"><div class="vazio">Carregando as habilidades…</div></section>`;
+  const porHeroi = agrupar(lista, "heroi_id");
+  return `<section class="painel"><header><h2>Suas habilidades</h2><small>usos contados pelas teclas, respeitando a recarga</small></header>
+    ${[...porHeroi.entries()].map(([heroiId, usos]) => {
+      const h = app.ref.heroi[heroiId];
+      if (!h) return "";
+      const n = Object.fromEntries(usos.map((u) => [u.habilidade_id, u.usos]));
+      return `<div class="usos-heroi">${porHeroi.size > 1 ? `<div class="usos-titulo"><img src="${h.retrato}" alt="">${esc(h.nome)}</div>` : ""}
+        <div class="usos">${h.rastreaveis.map((r) => cartaoHabilidade(habilidadeDe(h, r.id), n[r.id] || 0, "usos")).join("")}</div></div>`;
+    }).join("")}</section>`;
+}
+
+function blocoHabilidadesHeroi(h) {
+  if (!h.rastreaveis.length) return "";
+  const dados = carregarSobDemanda("habilidadesHeroi", h.id, `/api/herois/${h.id}/habilidades`);
+  if (!dados) return `<section class="painel"><div class="vazio">Carregando o uso de habilidades…</div></section>`;
+  if (!dados.partidas) {
+    return `<section class="painel"><header><h2>Uso de habilidades</h2></header>
+      <div class="vazio">Ainda não há partidas de ${esc(h.nome)} com o uso de habilidades registrado.</div></section>`;
+  }
+  const porHabilidade = Object.fromEntries(dados.habilidades.map((x) => [x.habilidade_id, x]));
+  const partidas = [...new Set(dados.por_partida.map((x) => x.partida_id))].slice(-12);
+  return `<section class="painel"><header><h2>Uso de habilidades</h2><small>${dados.partidas} partida${dados.partidas > 1 ? "s" : ""} registrada${dados.partidas > 1 ? "s" : ""}</small></header>
+    <div class="usos">${h.rastreaveis.map((r) => {
+      const x = porHabilidade[r.id] || { total: 0, media: 0, maximo: 0 };
+      const porPartida = partidas.map((id) => dados.por_partida.find((u) => u.partida_id === id && u.habilidade_id === r.id)?.usos || 0);
+      const maior = Math.max(1, ...porPartida);
+      const barras = `<div class="mini-barras" title="usos nas últimas partidas">${porPartida.map((v) =>
+        `<i style="height:${Math.max(6, (100 * v) / maior)}%"></i>`).join("")}</div>`;
+      return cartaoHabilidade(habilidadeDe(h, r.id), String(x.media).replace(".", ","), "por partida",
+        `<small class="uso-extra">total ${x.total} · máximo ${x.maximo}</small>${barras}`);
+    }).join("")}</div></section>`;
+}
+
 function paginaPartida(id) {
   const p = app.partidas.find((x) => x.id === Number(id));
   if (!p) return `<div class="vazio">Partida não encontrada.</div>`;
@@ -482,6 +561,7 @@ function paginaPartida(id) {
       </div>
     </div>
   </section>
+  ${blocoHabilidadesPartida(p)}
   ${!p.tem_times
     ? `<section class="painel"><div class="vazio">O placar dos dois times não foi capturado nesta partida.<br>
         Aperte <kbd>Tab</kbd> durante a partida e quando aparecer o resultado: o app registra aliados e inimigos.</div></section>`
@@ -829,6 +909,8 @@ async function recarregarPartidas() {
   app.partidas = await api.ler("/api/partidas");
   app.versao = app.estado ? app.estado.versao : app.versao;
   app.jogadores = {};  // os times podem ter mudado (ex.: Tab depois do fim)
+  app.habilidadesPartida = {};
+  app.habilidadesHeroi = {};
   if (document.getElementById("modal").hidden) desenhar();
 }
 

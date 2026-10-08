@@ -13,6 +13,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -81,6 +82,8 @@ def main():
     for nome, (modificadores, tecla) in ATALHOS.items():
         atalhos.adicionar(nome, modificadores, tecla)
     atalhos.iniciar()
+    threading.Thread(target=sistema.lembrar_tamanho_da_janela, args=(servico.sair,),
+                     daemon=True, name="tamanho-janela").start()
 
     logging.getLogger("owtracker").info("no ar em %s", URL)
     if not minimizado:

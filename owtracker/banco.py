@@ -40,6 +40,15 @@ CREATE TABLE IF NOT EXISTS jogadores (
     simbolos     TEXT,                      -- formas dos ícones lidos (JSON), para renomear
     PRIMARY KEY (partida_id, time, posicao)
 );
+
+-- Quantas vezes você usou cada habilidade na partida (teclas + recarga).
+CREATE TABLE IF NOT EXISTS habilidades_partida (
+    partida_id    INTEGER NOT NULL REFERENCES partidas(id) ON DELETE CASCADE,
+    heroi_id      TEXT    NOT NULL,
+    habilidade_id TEXT    NOT NULL,
+    usos          INTEGER NOT NULL,
+    PRIMARY KEY (partida_id, heroi_id, habilidade_id)
+);
 """
 
 # Placar (Tab) da sua linha; vazio (NULL) quando não foi lido.
@@ -187,6 +196,40 @@ class Banco:
         return (linha["heroi_id"], linha["fonte"], json.loads(linha["vetor"] or "[]"),
                 json.loads(linha["simbolos"] or "[]"))
 
+    # ------------------------------------------------------------ habilidades
+
+    def salvar_habilidades(self, id_partida, usos):
+        with self.con:
+            self.con.execute("DELETE FROM habilidades_partida WHERE partida_id = ?", (id_partida,))
+            self.con.executemany(
+                "INSERT INTO habilidades_partida VALUES (?, ?, ?, ?)",
+                [(id_partida, u["heroi_id"], u["habilidade_id"], u["usos"]) for u in usos])
+
+    def habilidades_da_partida(self, id_partida):
+        return [dict(r) for r in self.con.execute(
+            "SELECT heroi_id, habilidade_id, usos FROM habilidades_partida WHERE partida_id = ?",
+            (id_partida,))]
+
+    def habilidades_do_heroi(self, heroi_id):
+        """Uso de cada habilidade do herói em todas as partidas em que ele foi
+        contado: total, média por partida e o máximo numa partida."""
+        partidas = self.con.execute(
+            "SELECT COUNT(DISTINCT partida_id) FROM habilidades_partida WHERE heroi_id = ?",
+            (heroi_id,)).fetchone()[0]
+        linhas = [dict(r) for r in self.con.execute(
+            "SELECT habilidade_id, SUM(usos) AS total, MAX(usos) AS maximo "
+            "FROM habilidades_partida WHERE heroi_id = ? GROUP BY habilidade_id", (heroi_id,))]
+        for linha in linhas:
+            linha["media"] = round(linha["total"] / partidas, 1) if partidas else 0
+        por_partida = [dict(r) for r in self.con.execute(
+            "SELECT h.partida_id, p.data_hora, p.resultado, h.habilidade_id, h.usos "
+            "FROM habilidades_partida h JOIN partidas p ON p.id = h.partida_id "
+            "WHERE h.heroi_id = ? ORDER BY p.data_hora", (heroi_id,))]
+        return {"partidas": partidas, "habilidades": linhas, "por_partida": por_partida}
+
+    def partidas_com_habilidades(self):
+        return {r[0] for r in self.con.execute("SELECT DISTINCT partida_id FROM habilidades_partida")}
+
     def partidas_com_jogadores(self):
         return {r[0] for r in self.con.execute("SELECT DISTINCT partida_id FROM jogadores")}
 
@@ -196,6 +239,7 @@ class Banco:
     def apagar(self, id_partida):
         with self.con:
             self.con.execute("DELETE FROM jogadores WHERE partida_id = ?", (id_partida,))
+            self.con.execute("DELETE FROM habilidades_partida WHERE partida_id = ?", (id_partida,))
             self.con.execute("DELETE FROM partidas WHERE id = ?", (id_partida,))
 
     def listar_completo(self):
