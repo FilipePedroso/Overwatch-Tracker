@@ -49,6 +49,14 @@ CREATE TABLE IF NOT EXISTS habilidades_partida (
     usos          INTEGER NOT NULL,
     PRIMARY KEY (partida_id, heroi_id, habilidade_id)
 );
+-- Seus heróis na partida, na ordem em que foram jogados (trocas).
+CREATE TABLE IF NOT EXISTS herois_partida (
+    partida_id INTEGER NOT NULL REFERENCES partidas(id) ON DELETE CASCADE,
+    ordem      INTEGER NOT NULL,
+    heroi_id   TEXT    NOT NULL,
+    segundos   INTEGER NOT NULL,
+    PRIMARY KEY (partida_id, ordem)
+);
 """
 
 # Placar (Tab) da sua linha; vazio (NULL) quando não foi lido.
@@ -227,6 +235,21 @@ class Banco:
             "WHERE h.heroi_id = ? ORDER BY p.data_hora", (heroi_id,))]
         return {"partidas": partidas, "habilidades": linhas, "por_partida": por_partida}
 
+    def salvar_herois(self, id_partida, herois):
+        with self.con:
+            self.con.execute("DELETE FROM herois_partida WHERE partida_id = ?", (id_partida,))
+            self.con.executemany(
+                "INSERT INTO herois_partida VALUES (?, ?, ?, ?)",
+                [(id_partida, i, h["heroi_id"], h["segundos"]) for i, h in enumerate(herois)])
+
+    def herois_das_partidas(self):
+        """{partida_id: [{heroi_id, segundos}]} em ordem."""
+        saida = {}
+        for r in self.con.execute(
+                "SELECT partida_id, heroi_id, segundos FROM herois_partida ORDER BY partida_id, ordem"):
+            saida.setdefault(r[0], []).append({"heroi_id": r[1], "segundos": r[2]})
+        return saida
+
     def partidas_com_habilidades(self):
         return {r[0] for r in self.con.execute("SELECT DISTINCT partida_id FROM habilidades_partida")}
 
@@ -240,6 +263,7 @@ class Banco:
         with self.con:
             self.con.execute("DELETE FROM jogadores WHERE partida_id = ?", (id_partida,))
             self.con.execute("DELETE FROM habilidades_partida WHERE partida_id = ?", (id_partida,))
+            self.con.execute("DELETE FROM herois_partida WHERE partida_id = ?", (id_partida,))
             self.con.execute("DELETE FROM partidas WHERE id = ?", (id_partida,))
 
     def listar_completo(self):

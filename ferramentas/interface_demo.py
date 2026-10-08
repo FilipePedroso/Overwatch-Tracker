@@ -33,14 +33,19 @@ def partida_de_teste(s, print_do_tab):
     bgra[0::4], bgra[1::4], bgra[2::4], bgra[3::4] = rgba[2::4], rgba[1::4], rgba[0::4], rgba[3::4]
     bgra = bytes(bgra)
     ocr, detector = OCR(), s.monitor.detector
-    fala = [Linha("[FILIPE (SOMBRA)] Boop.", 800, 1030, 300, 18)]
-    for t in range(3):
-        detector.processar(fala, largura, altura, 1 + t, False)
+    def fala(texto, t):
+        detector.processar([Linha(texto, 800, 1030, 300, 18)], largura, altura, t, False)
+    # começou de Ana, trocou para Sombra (uma leitura errada de Genji no meio some)
+    fala("[FILIPE (ANA)] Eu estou aqui.", 1)
+    fala("[FILIPE (ANA)] Ninguém escapa do meu olhar.", 40)
+    fala("[FILIPE (GENJI)] Preciso de cura!", 120)
+    fala("[FILIPE (SOMBRA)] Boop.", 150)
+    fala("[FILIPE (SOMBRA)] Sistemas hackeados.", 160)
     # apertos de tecla simulados (o E repetido dentro da recarga conta uma vez só)
-    detector.teclas([("e", 3.2), ("e", 3.4), ("shift", 4.0), ("botao_direito", 5.0), ("e", 9.9)])
+    detector.teclas([("e", 163.2), ("e", 163.4), ("shift", 164.0), ("botao_direito", 165.0), ("e", 179.9)])
     tela = Tela(ocr, bgra, largura, altura, s.monitor.reconhecedor)
-    detector.processar(ocr.ler(bgra, largura, altura), largura, altura, 10, True, tela=tela)
-    registro, _ = detector.processar([Linha("[ATHENA] Vitória.", 800, 1030, 300, 18)], largura, altura, 12, False)
+    detector.processar(ocr.ler(bgra, largura, altura), largura, altura, 400, True, tela=tela)
+    registro, _ = detector.processar([Linha("[ATHENA] Vitória.", 800, 1030, 300, 18)], largura, altura, 600, False)
     s._ao_registrar(registro)
     print("partida de teste:", registro.heroi, registro.mapa, registro.resultado,
           "| times:", "sim" if registro.times else "não")

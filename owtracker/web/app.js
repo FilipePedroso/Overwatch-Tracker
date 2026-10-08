@@ -146,7 +146,7 @@ function linhaPartida(p, completa = false) {
     ${m ? `<img class="mapa-fundo" src="${m.imagem}" alt="">` : ""}
     <div class="faixa"></div>
     ${h ? `<img class="retrato" src="${h.retrato}" alt="">` : `<div class="retrato"></div>`}
-    <div class="quem"><b>${esc(h ? h.nome : p.heroi)}</b>
+    <div class="quem"><b>${esc(h ? h.nome : p.heroi)}${trocasMini(p)}</b>
       <span>${modo ? `<img src="${modo.icone}" alt="">` : ""}${esc(m ? m.nome : p.mapa)} <span class="fila">· ${esc(p.modo)}</span></span></div>
     ${extras}
     <div class="stat"><b>${fmt(p.dano)}</b><small>Dano</small></div>
@@ -154,6 +154,30 @@ function linhaPartida(p, completa = false) {
     <div class="stat"><b>${fmt(p.mitigado)}</b><small>Mitigado</small></div>
     <div class="res">${esc(p.resultado)}<small>${quando(p.data_hora)}</small></div>
   </div>`;
+}
+
+const duracao = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+function trocasMini(p) {
+  // Na linha do histórico: os heróis da partida em ordem, quando houve troca.
+  if (!(p.herois?.length > 1)) return "";
+  return `<span class="trocas">${p.herois.map((x) => {
+    const h = app.ref.heroi[x.heroi_id];
+    return h ? `<img src="${h.retrato}" alt="" title="${esc(`${h.nome} · ${duracao(x.segundos)}`)}">` : "";
+  }).join("")}</span>`;
+}
+
+function blocoHeroisDaPartida(p) {
+  // Linha do tempo dos seus heróis (só aparece quando você trocou).
+  if (!(p.herois?.length > 1)) return "";
+  const total = p.herois.reduce((a, x) => a + x.segundos, 0) || 1;
+  const partes = p.herois.map((x) => ({ ...x, h: app.ref.heroi[x.heroi_id], pct: Math.round((100 * x.segundos) / total) }));
+  return `<section class="painel"><header><h2>Heróis usados</h2><small>em ordem, com o tempo aproximado de cada um</small></header>
+    <div class="linha-herois">${partes.map((x) => `<div style="flex:${Math.max(x.segundos, 1)};background:${CORES_FUNCAO[x.h?.funcao] || "var(--texto-3)"}" class="trecho" title="${esc(x.h?.nome || x.heroi_id)}"></div>`).join("")}</div>
+    <div class="herois-usados">${partes.map((x, i) => `${i ? `<span class="seta">→</span>` : ""}
+      <a class="heroi-usado" href="#/herois/${x.heroi_id}">${x.h ? `<img src="${x.h.retrato}" alt="">` : ""}
+        <div><b>${esc(x.h?.nome || x.heroi_id)}</b><small>${duracao(x.segundos)} · ${x.pct}%</small></div></a>`).join("")}</div>
+  </section>`;
 }
 
 function anel(t, tamanho = 64) {
@@ -504,7 +528,9 @@ function blocoHabilidadesPartida(p) {
   }
   const lista = carregarSobDemanda("habilidadesPartida", p.id, `/api/partidas/${p.id}/habilidades`);
   if (!lista) return `<section class="painel"><div class="vazio">Carregando as habilidades…</div></section>`;
-  const porHeroi = agrupar(lista, "heroi_id");
+  // heróis na ordem em que foram jogados (também os sem nenhum uso)
+  const porHeroi = new Map((p.herois || []).map((x) => [x.heroi_id, []]));
+  for (const [id, usos] of agrupar(lista, "heroi_id")) porHeroi.set(id, usos);
   return `<section class="painel"><header><h2>Suas habilidades</h2><small>usos contados pelas teclas, respeitando a recarga</small></header>
     ${[...porHeroi.entries()].map(([heroiId, usos]) => {
       const h = app.ref.heroi[heroiId];
@@ -561,6 +587,7 @@ function paginaPartida(id) {
       </div>
     </div>
   </section>
+  ${blocoHeroisDaPartida(p)}
   ${blocoHabilidadesPartida(p)}
   ${!p.tem_times
     ? `<section class="painel"><div class="vazio">O placar dos dois times não foi capturado nesta partida.<br>

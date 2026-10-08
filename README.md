@@ -94,6 +94,20 @@ só com o Overwatch em primeiro plano:
   Registro manual e só falta você clicar no resultado.
 - Para calibrar sem jogar: `python -m owtracker.reproduzir dados/diagnostico.log FILIPE`.
 
+## Heróis usados (trocas)
+
+Cada partida guarda os seus heróis em ordem, com o tempo aproximado de cada um
+(página da partida, "Heróis usados", e retratos pequenos no histórico). O
+principal é o que você jogou por mais tempo.
+
+Para não entrar leitura errada (comum no começo da partida):
+- a mesma fala parada na tela, ou repetida no chat, conta uma vez só;
+- um herói só entra com 2 falas distintas, ou com a mensagem "X trocou para Y",
+  ou com o retrato da sua linha no Tab (as vantagens da linha valem meia prova);
+- um trecho sem confirmação é descartado e os vizinhos se juntam;
+- as habilidades só passam para o herói novo depois da confirmação (os apertos
+  do meio esperam e depois contam para o herói certo).
+
 ## Uso de habilidades
 
 Com o seu herói conhecido (pela legenda), o app conta quantas vezes você usou

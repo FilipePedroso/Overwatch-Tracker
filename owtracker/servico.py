@@ -29,8 +29,7 @@ class Servico:
         self.pendente = None         # partida que acabou sem o resultado lido
         self.aviso = None            # última notícia para a interface: {texto, quando}
         self.ultimo_auto_id = None   # recebe o placar final do Tab aberto depois do fim
-        self._times_pendentes = None  # times da partida pendente (não vão para o JSON do estado)
-        self._habilidades_pendentes = None
+        self._extras_pendentes = None  # Registro da partida pendente (times, habilidades, heróis)
         self.monitor = Monitor(
             avisar=self._ao_status, ao_registrar=self._ao_registrar,
             ao_atualizar=self._ao_parcial, ao_corrigir_placar=self._ao_placar_final)
@@ -58,18 +57,14 @@ class Servico:
                 # Vimos a tela pós-partida, mas não o resultado: a interface pergunta.
                 self.ultimo_auto_id = None
                 self.pendente = {"heroi": r.heroi, "mapa": r.mapa, "modo": r.modo, "placar": r.placar,
-                                 "observacao": _observacao(r.herois_jogados)}
-                self._times_pendentes = r.times
-                self._habilidades_pendentes = r.habilidades
+                                 "observacao": ""}
+                self._extras_pendentes = r
                 self._noticia("A partida terminou, mas não li o resultado: confirme no app.")
                 return
             self.ultimo_auto_id = self.banco.registrar(
                 r.heroi, r.mapa, r.modo, r.resultado, origem="auto",
-                observacao=_observacao(r.herois_jogados), placar=r.placar)
-            if r.times:
-                self.banco.salvar_jogadores(self.ultimo_auto_id, r.times)
-            if r.habilidades:
-                self.banco.salvar_habilidades(self.ultimo_auto_id, r.habilidades)
+                placar=r.placar)
+            self._salvar_extras(self.ultimo_auto_id, r)
             self.versao += 1
             self._noticia(f"Registrada: {r.resultado} · {r.heroi} · {r.mapa}")
 
@@ -99,7 +94,9 @@ class Servico:
             partidas = self.banco.listar_completo()
             com_times = self.banco.partidas_com_jogadores()
             com_habilidades = self.banco.partidas_com_habilidades()
+            herois = self.banco.herois_das_partidas()
         for p in partidas:
+            p["herois"] = herois.get(p["id"], [])
             p["tem_times"] = p["id"] in com_times
             p["tem_habilidades"] = p["id"] in com_habilidades
         return partidas
@@ -170,17 +167,23 @@ class Servico:
         """Grava a partida que acabou sem resultado lido (ou descarta, com None)."""
         with self.trava:
             p, self.pendente = self.pendente, None
-            times, self._times_pendentes = self._times_pendentes, None
-            usos, self._habilidades_pendentes = self._habilidades_pendentes, None
+            extras, self._extras_pendentes = self._extras_pendentes, None
             if p and resultado in dados.RESULTADOS:
                 self.ultimo_auto_id = self.banco.registrar(
                     p["heroi"], p["mapa"], p["modo"], resultado, origem="auto",
                     observacao=p["observacao"], placar=p["placar"])
-                if times:
-                    self.banco.salvar_jogadores(self.ultimo_auto_id, times)
-                if usos:
-                    self.banco.salvar_habilidades(self.ultimo_auto_id, usos)
+                if extras:
+                    self._salvar_extras(self.ultimo_auto_id, extras)
                 self.versao += 1
+
+    def _salvar_extras(self, id_partida, r):
+        """Times, uso de habilidades e linha do tempo de heróis de um Registro."""
+        if r.times:
+            self.banco.salvar_jogadores(id_partida, r.times)
+        if r.habilidades:
+            self.banco.salvar_habilidades(id_partida, r.habilidades)
+        if r.herois:
+            self.banco.salvar_herois(id_partida, r.herois)
 
     def descartar_andamento(self):
         self.monitor.descartar_partida()
@@ -216,8 +219,6 @@ def codigo_mudou_desde(instante):
     return mais_recente > instante + 1 and time.time() - mais_recente > ATUALIZACAO_ASSENTADA
 
 
-def _observacao(herois_jogados):
-    return "Heróis: " + ", ".join(herois_jogados) if len(herois_jogados) > 1 else ""
 
 
 _CATALOGO_WEB = None

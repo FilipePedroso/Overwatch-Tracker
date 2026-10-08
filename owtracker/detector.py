@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from . import catalogo, dados
 from .placar import ler_placar, ler_times, tela_do_placar
 from .habilidades import rastreaveis
-from .retratos import identificar
+from .retratos import FUNCAO_POR_POSICAO, identificar, reconhecer_vantagens
 
 TAMANHO_MIN_RESULTADO = 0.035  # altura mínima de VITÓRIA/DERROTA grande, em fração da tela
 ESPERA_POS_RESULTADO = 60      # s ignorando resultados depois de registrar
@@ -34,6 +34,10 @@ PARTIDA_PARADA = 900           # s sem novidade: a partida em andamento é desca
 LEITURAS_MAPA_NOVO = 3         # leituras do Tab para aceitar um mapa fora do catálogo
 INTERVALO_TIMES = 2.5          # s entre leituras completas dos dois times no Tab
 TEMPO_MORTO = 3.5              # s sem contar habilidades depois de ver "RESSURGIR EM"
+MESMA_FALA = 20                # s: o mesmo texto visto de novo antes disso é a mesma fala na tela
+SEMELHANCA_FALA = 0.75         # textos lidos tão parecidos são a mesma fala (o OCR varia)
+CONFIRMA_HEROI = 2             # peso para aceitar um herói seu (2 falas, ou Tab/troca)
+DESISTIR_CANDIDATO = 90        # s: herói novo visto uma vez e nunca confirmado é descartado
                                # (a tela inteira é lida a cada ~3 s)
 # Telas que não são partida (texto compactado, ver compactar()).
 TEXTOS_FORA_DE_PARTIDA = ("campodetreinamento", "practicerange")
@@ -132,6 +136,22 @@ def resultado_da_narradora(texto):
     return achar_exato_ou_parecido(resto, INDICE_RESULTADOS, 6) if resto else None
 
 
+def fala_nova(recentes, agora, texto):
+    """True se o texto não é a mesma fala vista há pouco (ela fica alguns
+    segundos na tela e o chat a mantém ainda mais). recentes: [(instante, texto)]
+    que esta função atualiza."""
+    # Só o que foi dito, sem "[FILIPE (SOMBRA)]": falas diferentes do mesmo
+    # herói têm esse começo igual.
+    chave = compactar(texto.split(")", 1)[-1]) or compactar(texto)
+    recentes[:] = [(t, x) for t, x in recentes if agora - t < MESMA_FALA]
+    for i, (t, x) in enumerate(recentes):
+        if x == chave or similaridade(x, chave) >= SEMELHANCA_FALA:
+            recentes[i] = (agora, x)  # ainda na tela: renova
+            return False
+    recentes.append((agora, chave))
+    return True
+
+
 def mesmo_nome(a, b):
     a, b = compactar(a), compactar(b)
     return a == b or (min(len(a), len(b)) >= 4 and similaridade(a, b) >= 0.8)
@@ -215,7 +235,12 @@ class Partida:
     heroi_atual: str = None                                    # id do seu herói agora
     usos: Counter = field(default_factory=Counter)            # (heroi_id, habilidade_id) -> usos
     ultimo_uso: dict = field(default_factory=dict)            # (heroi_id, tecla) -> instante
-    apertos_sem_heroi: list = field(default_factory=list)     # antes de saber o herói
+    apertos_pendentes: list = field(default_factory=list)     # antes de confirmar o herói
+    candidato: dict = None                                     # herói novo visto, a confirmar
+    # Linha do tempo dos seus heróis (ver herois_confirmados)
+    inicio: float = None                                       # quando a partida foi notada
+    sinais_heroi: list = field(default_factory=list)          # (instante, nome, herói, texto, peso)
+    heroi_no_tab: list = field(default_factory=list)          # (instante, heroi_id, peso) pela sua linha do Tab
     q_em: float = float("-inf")                                # último Q apertado
     suprema_pct: int = None                                    # último % da suprema lido no HUD
 
@@ -237,6 +262,48 @@ class Partida:
         if self.tab_competitivo is not None:
             return "Competitivo" if self.tab_competitivo else "Partida Rápida"
         return self.mais_votado(self.modos)
+
+    def herois_confirmados(self, nome_jogador, fim):
+        """Seus heróis em ordem, com o tempo de cada um:
+        [{"heroi_id", "desde", "segundos"}].
+
+        Cada fala distinta vale 1 (a mesma fala parada na tela, lida a cada
+        segundo, conta uma vez só); a sua linha do Tab e "X trocou para Y"
+        valem 2. Um trecho só entra com peso 2 ou mais: uma leitura errada
+        isolada (comum no começo da partida) some, e os vizinhos se juntam."""
+        if not nome_jogador and self.falas:
+            nome_jogador = max(self.falas, key=lambda n: sum(self.falas[n].values()))
+        eventos, recentes = [], []
+        for t, nome, heroi_nome, texto, peso in self.sinais_heroi:
+            heroi = catalogo.heroi(heroi_nome)
+            if heroi and mesmo_nome(nome, nome_jogador or "") and fala_nova(recentes, t, texto):
+                eventos.append((t, heroi["id"], peso))
+        eventos += self.heroi_no_tab
+        eventos.sort(key=lambda e: e[0])
+        trechos = []
+        for t, h, peso in eventos:
+            if trechos and trechos[-1]["heroi_id"] == h:
+                trechos[-1]["peso"] += peso
+            else:
+                trechos.append({"heroi_id": h, "desde": t, "peso": peso})
+        fortes = [x for x in trechos if x["peso"] >= CONFIRMA_HEROI]
+        if not fortes and trechos:  # nada confirmado: fica o mais visto
+            pesos = Counter()
+            for x in trechos:
+                pesos[x["heroi_id"]] += x["peso"]
+            melhor = pesos.most_common(1)[0][0]
+            fortes = [next(x for x in trechos if x["heroi_id"] == melhor)]
+        juntos = []
+        for x in fortes:
+            if juntos and juntos[-1]["heroi_id"] == x["heroi_id"]:
+                continue
+            juntos.append({"heroi_id": x["heroi_id"], "desde": x["desde"]})
+        if juntos and self.inicio is not None:
+            juntos[0]["desde"] = min(juntos[0]["desde"], self.inicio)
+        for i, x in enumerate(juntos):
+            ate = juntos[i + 1]["desde"] if i + 1 < len(juntos) else max(fim, x["desde"])
+            x["segundos"] = round(ate - x["desde"])
+        return juntos
 
     def vazia(self):
         return not (self.mapas or self.modos or self.falas or self.placar.leituras)
@@ -269,6 +336,7 @@ class Registro:
     placar: dict = field(default_factory=dict)  # E/A/M/dano/cura/mitigado (último Tab)
     times: dict = None  # aliados e inimigos lidos no Tab (ver placar.ler_times)
     habilidades: list = field(default_factory=list)  # [{heroi_id, habilidade_id, usos}]
+    herois: list = field(default_factory=list)  # seus heróis em ordem: [{heroi_id, segundos}]
 
 
 class Detector:
@@ -302,7 +370,8 @@ class Detector:
         if p.vazia():
             return None
         herois = p.herois_do_jogador(self.nome_jogador)
-        return {"heroi": p.mais_votado(herois), "mapa": p.mapa_final(),
+        atual = catalogo.heroi(p.heroi_atual) if p.heroi_atual else None
+        return {"heroi": atual["nome"] if atual else p.mais_votado(herois), "mapa": p.mapa_final(),
                 "modo": p.modo_final(), "placar": p.placar.final(),
                 "habilidades": self._usos_da_partida(p)}
 
@@ -318,11 +387,15 @@ class Detector:
         for tecla, quando in apertos:
             if self.fora_de_partida or quando < self.ignorar_ate or quando < self.morto_ate:
                 continue
+            if p.candidato and quando - p.candidato["desde"] > DESISTIR_CANDIDATO:
+                p.candidato = None  # nunca confirmado: era leitura errada
+                if p.heroi_atual:
+                    self._soltar_apertos(p, p.heroi_atual)
             if tecla == "q":
                 p.q_em = quando
-            elif not p.heroi_atual:
-                p.apertos_sem_heroi.append((tecla, quando))  # conta quando o herói aparecer
-                del p.apertos_sem_heroi[:-200]
+            elif not p.heroi_atual or p.candidato:
+                p.apertos_pendentes.append((tecla, quando))  # contam quando o herói for confirmado
+                del p.apertos_pendentes[:-300]
             else:
                 self._contar_aperto(p, p.heroi_atual, tecla, quando)
 
@@ -336,18 +409,51 @@ class Detector:
             p.usos[(heroi_id, habilidade["id"])] += 1
             p.ultimo_uso[(heroi_id, tecla)] = quando
 
-    def _heroi_do_jogador(self, heroi_nome):
-        """Uma fala sua nas legendas: esse é o seu herói agora."""
+    def _heroi_do_jogador(self, heroi_nome, texto, agora, peso=1):
+        """Uma fala sua nas legendas. O herói atual (o dono das habilidades
+        apertadas) só muda depois de confirmado: duas falas distintas, a troca
+        anunciada pelo jogo ou a sua linha do Tab. Enquanto isso os apertos
+        esperam, e depois contam para o herói certo."""
         heroi = catalogo.heroi(heroi_nome)
         if not heroi:
             return
+        p, h = self.partida, heroi["id"]
+        if h == p.heroi_atual:
+            if p.candidato:  # o candidato era leitura errada
+                p.candidato = None
+                self._soltar_apertos(p, h)
+            return
+        if not p.candidato or p.candidato["heroi_id"] != h:
+            p.candidato = {"heroi_id": h, "desde": agora, "peso": 0, "falas": []}
+        if fala_nova(p.candidato["falas"], agora, texto):
+            p.candidato["peso"] += peso
+        if p.candidato["peso"] >= CONFIRMA_HEROI:
+            self._confirmar_heroi(h)
+
+    def _confirmar_heroi(self, heroi_id):
         p = self.partida
-        primeira_vez = p.heroi_atual is None
-        p.heroi_atual = heroi["id"]
-        if primeira_vez:  # apertos do começo da partida, antes de saber o herói
-            for tecla, quando in p.apertos_sem_heroi:
-                self._contar_aperto(p, heroi["id"], tecla, quando)
-            p.apertos_sem_heroi.clear()
+        p.heroi_atual, p.candidato = heroi_id, None
+        self._soltar_apertos(p, heroi_id)
+
+    def _soltar_apertos(self, p, heroi_id):
+        for tecla, quando in p.apertos_pendentes:
+            self._contar_aperto(p, heroi_id, tecla, quando)
+        p.apertos_pendentes.clear()
+
+    def _heroi_na_sua_linha(self, times):
+        """Seu herói pela sua linha do Tab: (heroi_id, peso). O retrato já
+        conhecido confirma sozinho; as vantagens (podem errar) valem 1."""
+        for posicao, j in enumerate(times.get("aliados", [])):
+            if not j.get("voce"):
+                continue
+            funcao = FUNCAO_POR_POSICAO[posicao] if len(times["aliados"]) == 5 else None
+            if self.biblioteca is not None and j.get("vetor"):
+                heroi_id, _ = self.biblioteca.reconhecer(j["vetor"], funcao)
+                if heroi_id:
+                    return heroi_id, CONFIRMA_HEROI
+            heroi_id, _ = reconhecer_vantagens(j.get("vantagens", []), funcao)
+            return heroi_id, 1
+        return None, 0
 
     def _suprema(self, linhas, largura, altura, agora):
         """% da suprema no HUD (centro, embaixo). Ela foi usada quando o % estava
@@ -428,10 +534,11 @@ class Detector:
 
         mensagens = []
         for linha in linhas:
-            for nome, heroi in self._falas(linha.texto):
+            for nome, heroi, peso in self._falas(linha.texto):
                 self.partida.falas[nome.upper()][heroi] += 1
+                self.partida.sinais_heroi.append((agora, nome, heroi, linha.texto, peso))
                 if self.nome_jogador and mesmo_nome(nome, self.nome_jogador):
-                    self._heroi_do_jogador(heroi)
+                    self._heroi_do_jogador(heroi, linha.texto, agora, peso)
                 mensagens.append(f"Fala: {nome} ({heroi})")
 
         self._suprema(linhas, largura, altura, agora)
@@ -444,6 +551,8 @@ class Detector:
                 mensagens += self._tab(linhas, largura, altura, agora, tela)
         if mensagens:
             self.ultima_novidade = agora
+        if self.partida.inicio is None and not self.partida.vazia():
+            self.partida.inicio = agora
         return None, mensagens
 
     def descartar_partida(self):
@@ -476,6 +585,12 @@ class Detector:
             if times and coerente(_seus_valores(times), p.placar.final()):
                 p.times, p.times_em = times, agora
                 mensagens.append("Times lidos no Tab")
+                heroi_id, peso = self._heroi_na_sua_linha(times)
+                if heroi_id:
+                    p.heroi_no_tab.append((agora, heroi_id, peso))
+                    if peso >= CONFIRMA_HEROI and heroi_id != p.heroi_atual:
+                        self._confirmar_heroi(heroi_id)
+                    mensagens.append(f"Seu herói no Tab: {heroi_id} (peso {peso})")
         return mensagens
 
     def _identificar(self, times, heroi, falas, placar):
@@ -495,11 +610,11 @@ class Detector:
         for nome, trecho in RE_FALA.findall(texto):
             heroi = heroi_no_inicio(trecho)
             if heroi and not heroi_no_inicio(nome):  # "[HAZARD]" sozinho é inimigo
-                yield nome, heroi
+                yield nome, heroi, 1
         for nome, trecho in RE_TROCA.findall(texto):
             heroi = heroi_no_inicio(trecho)
-            if heroi:
-                yield nome, heroi
+            if heroi:  # mensagem do jogo: vale como confirmação
+                yield nome, heroi, CONFIRMA_HEROI
 
     def _resultado(self, linhas, largura, altura):
         # Tela pós-partida de votos: "DERROTA | ILIOS | TEMPO DA PARTIDA: 11:..."
@@ -580,20 +695,36 @@ class Detector:
 
     def _finalizar(self, resultado, agora):
         p = self.partida
-        herois = p.herois_do_jogador(self.nome_jogador)
+        linha_do_tempo = p.herois_confirmados(self.nome_jogador, agora)
+        nomes = {x["heroi_id"]: catalogo.heroi(x["heroi_id"])["nome"] for x in linha_do_tempo}
+        tempo = Counter()
+        for x in linha_do_tempo:
+            tempo[x["heroi_id"]] += x["segundos"]
+        if tempo:  # o principal é o que você jogou por mais tempo
+            heroi = nomes[tempo.most_common(1)[0][0]]
+        else:
+            heroi = p.mais_votado(p.herois_do_jogador(self.nome_jogador))
         registro = Registro(
-            heroi=p.mais_votado(herois),
+            heroi=heroi,
             mapa=p.mapa_final(),
             modo=p.modo_final(),
             resultado=resultado,
-            # heróis com poucas falas são ruído de OCR
-            herois_jogados=[h for h, n in herois.most_common() if n >= 2],
+            herois_jogados=list(dict.fromkeys(nomes[x["heroi_id"]] for x in linha_do_tempo)),
             placar=p.placar.final(),
         )
+        registro.herois = [{"heroi_id": x["heroi_id"], "segundos": x["segundos"]} for x in linha_do_tempo]
+        if p.apertos_pendentes and (p.heroi_atual or linha_do_tempo):
+            # apertos esperando confirmação: vão para o herói em que você terminou
+            self._soltar_apertos(p, p.heroi_atual or linha_do_tempo[-1]["heroi_id"])
         registro.habilidades = self._usos_da_partida(p)
         if p.times:
-            registro.times = self._identificar(p.times, registro.heroi, p.falas, registro.placar)
-        self.contexto_fim = (registro.heroi, p.falas)
+            # na sua linha do Tab está o herói daquele momento (pode ter trocado)
+            no_tab = [x for x in linha_do_tempo if x["desde"] <= p.times_em]
+            heroi_no_tab = nomes[no_tab[-1]["heroi_id"]] if no_tab else registro.heroi
+            registro.times = self._identificar(p.times, heroi_no_tab, p.falas, registro.placar)
+        # o Tab depois do fim mostra o herói com que você terminou
+        ultimo = nomes[linha_do_tempo[-1]["heroi_id"]] if linha_do_tempo else registro.heroi
+        self.contexto_fim = (ultimo, p.falas)
         self.times_pos_fim, self.times_pos_fim_em = None, float("-inf")
         # Só conta quem falou de verdade (3+ vezes), não um nome lido errado uma vez.
         self.partidas_por_falante.update(
