@@ -101,6 +101,15 @@ class _Manipulador(BaseHTTPRequestHandler):
                 return self._json(s.partidas())
             if rota == "/api/catalogo":
                 return self._json(s.catalogo())
+            m = re.fullmatch(r"/api/partidas/(\d+)/jogadores", rota)
+            if m:
+                return self._json(s.jogadores(int(m.group(1))))
+            m = re.fullmatch(r"/api/retratos/(\d+)/(aliados|inimigos)/([0-4])\.png", rota)
+            if m:
+                png = s.retrato(int(m.group(1)), m.group(2), int(m.group(3)))
+                if png:
+                    return self._enviar(200, png, "image/png", cache=True)
+                return self._json({"erro": "não encontrado"}, 404)
             if re.fullmatch(r"/[\w.-]+\.(css|js|ico|png|svg)", rota):
                 return self._arquivo(PASTA_WEB, rota[1:])
             self._json({"erro": "não encontrado"}, 404)
@@ -131,6 +140,11 @@ class _Manipulador(BaseHTTPRequestHandler):
             if metodo == "DELETE" and id_:
                 s.apagar_partida(int(id_.group(1)))
                 return self._json({"ok": True})
+            jogador = re.fullmatch(r"/api/partidas/(\d+)/jogadores/(aliados|inimigos)/([0-4])", rota)
+            if metodo == "PUT" and jogador:
+                s.corrigir_jogador(int(jogador.group(1)), jogador.group(2), int(jogador.group(3)),
+                                   corpo.get("heroi_id") or None)
+                return self._json({"ok": True})
             if metodo == "POST" and rota == "/api/pendente":
                 s.confirmar_pendente(corpo.get("resultado"))
                 return self._json({"ok": True})
@@ -143,8 +157,9 @@ class _Manipulador(BaseHTTPRequestHandler):
             if metodo == "POST" and rota == "/api/pasta-diagnostico":
                 s.abrir_pasta_diagnostico()
                 return self._json({"ok": True})
-            if metodo == "POST" and rota == "/api/sair":
+            if metodo == "POST" and rota in ("/api/sair", "/api/reiniciar"):
                 self._json({"ok": True})
+                s.reiniciar = rota == "/api/reiniciar"
                 s.sair.set()
                 return
             self._json({"erro": "não encontrado"}, 404)

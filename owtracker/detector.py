@@ -22,7 +22,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from . import catalogo, dados
-from .placar import ler_placar, tela_do_placar
+from .placar import ler_placar, ler_times, tela_do_placar
+from .retratos import identificar
 
 TAMANHO_MIN_RESULTADO = 0.035  # altura mínima de VITÓRIA/DERROTA grande, em fração da tela
 ESPERA_POS_RESULTADO = 60      # s ignorando resultados depois de registrar
@@ -30,6 +31,7 @@ MAPA_ANTIGO = 180              # s sem ver o mapa: outro mapa = nova partida
 MESMO_TAB = 15                 # s: leituras do placar tão próximas são o mesmo Tab aberto
 PARTIDA_PARADA = 900           # s sem novidade: a partida em andamento é descartada
 LEITURAS_MAPA_NOVO = 3         # leituras do Tab para aceitar um mapa fora do catálogo
+INTERVALO_TIMES = 2.5          # s entre leituras completas dos dois times no Tab
 # Telas que não são partida (texto compactado, ver compactar()).
 TEXTOS_FORA_DE_PARTIDA = ("campodetreinamento", "practicerange")
 
@@ -150,6 +152,10 @@ def parece_mapa_conhecido(nome):
     return any(similaridade(alvo, chave) >= 0.5 for chave in INDICE_MAPAS)
 
 
+def _seus_valores(times):
+    return next((j["valores"] for j in times["aliados"] if j["voce"]), {})
+
+
 def coerente(novo, anterior):
     """Os números do placar só sobem durante a partida. Se 2+ colunas
     diminuíram, a leitura é de outra linha (ex.: mouse sobre outro jogador).
@@ -190,6 +196,8 @@ class Partida:
     falas: defaultdict = field(default_factory=lambda: defaultdict(Counter))  # nome -> heróis
     mapa_visto_em: dict = field(default_factory=dict)
     placar: "LeiturasPlacar" = field(default_factory=lambda: LeiturasPlacar())
+    times: dict = None                  # última leitura dos dois times no Tab
+    times_em: float = float("-inf")
     tab_competitivo: bool = None  # None = Tab não visto; o cabeçalho diz se é Competitivo
     mapas_tab: Counter = field(default_factory=Counter)        # mapa lido no cabeçalho do Tab
     mapas_desconhecidos: Counter = field(default_factory=Counter)  # idem, fora do catálogo
@@ -242,6 +250,7 @@ class Registro:
     resultado: str  # None = partida acabou, mas o resultado não foi lido
     herois_jogados: list
     placar: dict = field(default_factory=dict)  # E/A/M/dano/cura/mitigado (último Tab)
+    times: dict = None  # aliados e inimigos lidos no Tab (ver placar.ler_times)
 
 
 class Detector:
@@ -254,6 +263,9 @@ class Detector:
         self.fora_de_partida = False   # no Campo de Treinamento
         self.placar_registrado = {}    # placar gravado com a última partida
         self.pos_fim = LeiturasPlacar()  # Tabs abertos logo depois do resultado
+        self.biblioteca = None           # retratos.Biblioteca (o monitor entrega)
+        self.contexto_fim = (None, {})   # herói e falas da partida que acabou
+        self.times_pos_fim, self.times_pos_fim_em = None, float("-inf")
         # Em quantas partidas cada nome falou: os colegas mudam, você não.
         self.partidas_por_falante = Counter(partidas_por_falante or {})
 
@@ -289,6 +301,12 @@ class Detector:
                     return None, [f"Placar ignorado (diminuiu: outra linha?): {placar}"]
                 if placar:
                     self.pos_fim.adicionar(placar, agora)
+                    if agora - self.times_pos_fim_em >= INTERVALO_TIMES:
+                        times = ler_times(linhas, largura, altura, tela)
+                        if times and coerente(_seus_valores(times), self.placar_pos_fim()):
+                            heroi, falas = self.contexto_fim
+                            self.times_pos_fim = self._identificar(times, heroi, falas, self.placar_pos_fim())
+                            self.times_pos_fim_em = agora
                     return None, [f"Placar pós-fim: {placar}"]
             return None, []  # tela de fim/destaque da partida que acabou de ser registrada
 
@@ -356,7 +374,24 @@ class Detector:
         elif placar:
             p.placar.adicionar(placar, agora)
             mensagens.append(f"Placar: {placar}")
+        # Os dois times (retratos, números de todos): mais pesado, então no
+        # máximo a cada INTERVALO_TIMES enquanto o Tab estiver aberto.
+        if agora - p.times_em >= INTERVALO_TIMES:
+            times = ler_times(linhas, largura, altura, tela)
+            if times and coerente(_seus_valores(times), p.placar.final()):
+                p.times, p.times_em = times, agora
+                mensagens.append("Times lidos no Tab")
         return mensagens
+
+    def _identificar(self, times, heroi, falas, placar):
+        """Heróis de cada linha (ver retratos.identificar). Na sua linha valem
+        os números do placar registrado (lidos com OCR extra)."""
+        for j in times["aliados"]:
+            if j["voce"]:
+                j["valores"] = {**j["valores"], **placar}
+        if self.biblioteca is not None:
+            identificar(times, heroi, self.biblioteca, falas, self.nome_jogador)
+        return times
 
     # ------------------------------------------------------------ leituras
 
@@ -460,6 +495,10 @@ class Detector:
             herois_jogados=[h for h, n in herois.most_common() if n >= 2],
             placar=p.placar.final(),
         )
+        if p.times:
+            registro.times = self._identificar(p.times, registro.heroi, p.falas, registro.placar)
+        self.contexto_fim = (registro.heroi, p.falas)
+        self.times_pos_fim, self.times_pos_fim_em = None, float("-inf")
         # Só conta quem falou de verdade (3+ vezes), não um nome lido errado uma vez.
         self.partidas_por_falante.update(
             nome for nome, herois in p.falas.items() if sum(herois.values()) >= 3)

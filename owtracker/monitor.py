@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import digitos, janelas
+from . import digitos, janelas, retratos
 from .banco import PASTA_DADOS
 from .digitos import segmentar
 from .captura import Captura, jogo_em_foco
@@ -94,6 +94,11 @@ class Tela:
                        for t in self.ocr.ler(grande, lg, ag)]
         return linhas
 
+    def rgb(self, x, y, l, a):
+        """Recorte RGB (para os retratos dos heróis no placar)."""
+        x, y, l, a = self._dentro(x, y, l, a)
+        return janelas.bgra_para_rgb(recortar(self.bgra, self.largura, x, y, l, a))
+
     def numeros(self, x, y, l, a, apagados=False):
         """Números separados pelo reconhecedor próprio. apagados=True inclui
         o texto cinza (o jogo mostra o zero em cinza)."""
@@ -119,12 +124,14 @@ class Monitor(threading.Thread):
         self.avisar = avisar              # avisar(texto): status para a interface
         self.ao_registrar = ao_registrar  # ao_registrar(Registro)
         self.ao_atualizar = ao_atualizar  # ao_atualizar(dict ou None): partida em andamento
-        self.ao_corrigir_placar = ao_corrigir_placar  # (dict): placar final da última partida
+        self.ao_corrigir_placar = ao_corrigir_placar  # (placar, times): finais da última partida
         self._ultimo_parcial = None
         self._descartar = False
         self.config = carregar_config()
         self.detector = Detector(self.config["nome_jogador"], self.config["partidas_por_falante"])
         self.reconhecedor = digitos.carregar(ARQUIVO_DIGITOS)
+        self.biblioteca = retratos.Biblioteca()  # retratos de heróis já identificados
+        self.detector.biblioteca = self.biblioteca
         self._parar = threading.Event()
         self._ultimo_print = 0.0
         self._ultimo_texto = None
@@ -213,7 +220,7 @@ class Monitor(threading.Thread):
                     self.ao_registrar(registro)
                     self._salvar_aprendizado()
                 if any(v.startswith("Placar pós-fim") for v in vistos) and self.ao_corrigir_placar:
-                    self.ao_corrigir_placar(detector.placar_pos_fim())
+                    self.ao_corrigir_placar(detector.placar_pos_fim(), detector.times_pos_fim)
                 self._avisar_parcial()
                 if self.config["diagnostico"]:
                     self._diagnostico(bgra, largura, altura, linhas, vistos, registro, tela_inteira)
@@ -225,6 +232,7 @@ class Monitor(threading.Thread):
             self._parar.wait(VERIFICAR_TAB)
         captura.fechar()
         digitos.salvar(self.reconhecedor, ARQUIVO_DIGITOS)
+        self.biblioteca.salvar()
 
     def _avisar_parcial(self):
         parcial = self.detector.parcial()
@@ -234,6 +242,7 @@ class Monitor(threading.Thread):
 
     def _salvar_aprendizado(self):
         digitos.salvar(self.reconhecedor, ARQUIVO_DIGITOS)
+        self.biblioteca.salvar()
         detector = self.detector
         self.config["partidas_por_falante"] = dict(detector.partidas_por_falante.most_common(50))
         nome = detector.aprender_nome()

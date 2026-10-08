@@ -7,9 +7,11 @@ threads diferentes.
 
 import json
 import threading
+import time
 from datetime import datetime
+from pathlib import Path
 
-from . import catalogo, dados, sistema
+from . import catalogo, dados, retratos, sistema
 from .banco import COLUNAS_PLACAR, Banco
 from .monitor import PASTA_DIAGNOSTICO, Monitor, salvar_config
 
@@ -18,6 +20,8 @@ class Servico:
     def __init__(self):
         self.trava = threading.RLock()
         self.sair = threading.Event()
+        self.reiniciar = False       # sair para abrir de novo (código atualizado)
+        self.inicio = time.time()
         self.banco = Banco()
         self.versao = 0              # muda quando o histórico muda (a interface recarrega)
         self.status_monitor = "Iniciando…"
@@ -25,6 +29,7 @@ class Servico:
         self.pendente = None         # partida que acabou sem o resultado lido
         self.aviso = None            # última notícia para a interface: {texto, quando}
         self.ultimo_auto_id = None   # recebe o placar final do Tab aberto depois do fim
+        self._times_pendentes = None  # times da partida pendente (não vão para o JSON do estado)
         self.monitor = Monitor(
             avisar=self._ao_status, ao_registrar=self._ao_registrar,
             ao_atualizar=self._ao_parcial, ao_corrigir_placar=self._ao_placar_final)
@@ -53,18 +58,23 @@ class Servico:
                 self.ultimo_auto_id = None
                 self.pendente = {"heroi": r.heroi, "mapa": r.mapa, "modo": r.modo, "placar": r.placar,
                                  "observacao": _observacao(r.herois_jogados)}
+                self._times_pendentes = r.times
                 self._noticia("A partida terminou, mas não li o resultado: confirme no app.")
                 return
             self.ultimo_auto_id = self.banco.registrar(
                 r.heroi, r.mapa, r.modo, r.resultado, origem="auto",
                 observacao=_observacao(r.herois_jogados), placar=r.placar)
+            if r.times:
+                self.banco.salvar_jogadores(self.ultimo_auto_id, r.times)
             self.versao += 1
             self._noticia(f"Registrada: {r.resultado} · {r.heroi} · {r.mapa}")
 
-    def _ao_placar_final(self, placar):
+    def _ao_placar_final(self, placar, times=None):
         with self.trava:
             if self.ultimo_auto_id:
                 self.banco.atualizar_placar(self.ultimo_auto_id, placar)
+                if times:  # Tab depois do fim: os números finais de todo mundo
+                    self.banco.salvar_jogadores(self.ultimo_auto_id, times)
                 self.versao += 1
                 self._noticia("Placar final atualizado pelo Tab depois do fim da partida.")
 
@@ -75,13 +85,46 @@ class Servico:
         return {
             "versao": self.versao, "monitor": self.status_monitor, "parcial": self.parcial,
             "pendente": self.pendente, "aviso": self.aviso,
+            "inicio": self.inicio, "atualizacao": codigo_mudou_desde(self.inicio),
             "ajustes": {"nome_jogador": config["nome_jogador"], "diagnostico": config["diagnostico"],
                         "iniciar_com_windows": sistema.inicia_com_windows()},
         }
 
     def partidas(self):
         with self.trava:
-            return self.banco.listar_completo()
+            partidas = self.banco.listar_completo()
+            com_times = self.banco.partidas_com_jogadores()
+        for p in partidas:
+            p["tem_times"] = p["id"] in com_times
+        return partidas
+
+    def jogadores(self, id_partida):
+        with self.trava:
+            return self.banco.jogadores(id_partida)
+
+    def retrato(self, id_partida, time, posicao):
+        with self.trava:
+            return self.banco.retrato(id_partida, time, posicao)
+
+    def corrigir_jogador(self, id_partida, time, posicao, heroi_id):
+        """Corrige o herói de um jogador e ensina a biblioteca de retratos:
+        da próxima vez, esse retrato (essa skin) é reconhecido sozinho."""
+        if heroi_id and not catalogo.heroi(heroi_id):
+            raise ValueError("Herói desconhecido.")
+        biblioteca = self.monitor.biblioteca
+        with self.trava:
+            anterior = self.banco.definir_heroi_jogador(id_partida, time, posicao, heroi_id)
+            if anterior is None:
+                raise ValueError("Jogador não encontrado.")
+            heroi_antigo, _, vetor, simbolos = anterior
+            if heroi_antigo and heroi_antigo != heroi_id:
+                biblioteca.esquecer(heroi_antigo, vetor)
+            if heroi_id:
+                biblioteca.aprender(heroi_id, vetor)
+            biblioteca.salvar()
+            # Com o herói certo, os ícones lidos viram as vantagens certas.
+            self.banco.definir_vantagens_jogador(id_partida, time, posicao,
+                                                 retratos.nomear_vantagens(heroi_id, simbolos))
 
     def catalogo(self):
         return catalogo_web()
@@ -113,10 +156,13 @@ class Servico:
         """Grava a partida que acabou sem resultado lido (ou descarta, com None)."""
         with self.trava:
             p, self.pendente = self.pendente, None
+            times, self._times_pendentes = self._times_pendentes, None
             if p and resultado in dados.RESULTADOS:
                 self.ultimo_auto_id = self.banco.registrar(
                     p["heroi"], p["mapa"], p["modo"], resultado, origem="auto",
                     observacao=p["observacao"], placar=p["placar"])
+                if times:
+                    self.banco.salvar_jogadores(self.ultimo_auto_id, times)
                 self.versao += 1
 
     def descartar_andamento(self):
@@ -135,6 +181,15 @@ class Servico:
 
     def abrir_pasta_diagnostico(self):
         sistema.abrir_pasta(PASTA_DIAGNOSTICO)
+
+
+PASTA_CODIGO = Path(__file__).resolve().parent
+
+
+def codigo_mudou_desde(instante):
+    """O código Python do app foi atualizado depois que ele abriu? A interface
+    (web/) é lida do disco a cada F5, mas o serviço só usa código novo ao reiniciar."""
+    return any(arquivo.stat().st_mtime > instante + 1 for arquivo in PASTA_CODIGO.glob("*.py"))
 
 
 def _observacao(herois_jogados):
@@ -188,7 +243,7 @@ def catalogo_web():
             "local": h["local"], "vida": h["vida"], "armadura": h["armadura"], "escudo": h["escudo"],
             "novo": h["novo"], "retrato": imagem(f"herois/{h['id']}", h["retrato_url"]),
             "habilidades": [{
-                "nome": a["nome"] or a["nome_en"], "nome_en": a["nome_en"], "tipo": a["tipo"],
+                "id": a["id"], "nome": a["nome"] or a["nome_en"], "nome_en": a["nome_en"], "tipo": a["tipo"],
                 "descricao": a["descricao"] or a["descricao_en"], "tecla": a["tecla"],
                 "recarga": a["recarga"],
                 "icone": imagem(f"habilidades/{h['id']}__{a['id']}", a["icone_url"] or a.get("imagem_wiki_url")),

@@ -20,6 +20,10 @@ ENTRE_LINHAS = 0.0611      # distância entre linhas (fração da altura da tela
 ALTURA_LINHA = 0.040
 ACIMA_DOS_NUMEROS = 0.019  # onde medir o fundo da linha: acima dos números (sem texto)
 DESTAQUE_MINIMO = 25       # quanto a sua linha precisa ser mais clara que as outras
+PRIMEIRA_INIMIGA = 0.4259  # centro da 1ª linha do time inimigo abaixo do "DAN"
+FAIXA_FUNCAO = 0.0265      # faixa colorida da função, antes do retrato (fração da altura)
+LADO_RETRATO = 0.0574      # retrato quadrado do herói (fração da altura)
+RAIO_VANTAGEM = 0.026      # meia altura da área onde ficam os ícones de vantagem
 
 RE_NUMERO = re.compile(r"^[\d.,oOlI ]+$")
 
@@ -44,6 +48,7 @@ class Geometria:
         self.passo = mit.x - dan.x
         self.ancoras = [dan.x + p * self.passo for p in POSICOES]
         self.linhas_y = [dan.y + (PRIMEIRA_LINHA + i * ENTRE_LINHAS) * altura for i in range(5)]
+        self.inimigos_y = [dan.y + (PRIMEIRA_INIMIGA + i * ENTRE_LINHAS) * altura for i in range(5)]
         self.altura_linha = ALTURA_LINHA * altura
 
     def coluna(self, x):
@@ -110,10 +115,15 @@ def ler_placar(linhas, largura, altura, tela=None):
     y_jogador = linha_do_jogador(geometria, altura, tela)
     if y_jogador is None:
         return None  # não deu para saber qual é a sua linha: melhor não chutar
-    faixa = geometria.faixa_da_linha(y_jogador)
+    return ler_linha(linhas, geometria, y_jogador, tela, ocr_extra=True) or None
 
-    valores = valores_da_linha(tela.ler_faixa(*faixa), geometria, y_jogador)
-    for coluna, valor in valores_da_linha(linhas, geometria, y_jogador).items():
+
+def ler_linha(linhas, geometria, y, tela, ocr_extra=False):
+    """Os seis números de uma linha do placar. ocr_extra=True faz um OCR a
+    mais só da linha, ampliado (mais lento; usado na sua linha)."""
+    faixa = geometria.faixa_da_linha(y)
+    valores = valores_da_linha(tela.ler_faixa(*faixa), geometria, y) if ocr_extra else {}
+    for coluna, valor in valores_da_linha(linhas, geometria, y).items():
         valores.setdefault(coluna, valor)
 
     # O OCR pula dígitos sozinhos (o "1"). O reconhecedor próprio aprende com
@@ -144,4 +154,71 @@ def ler_placar(linhas, largura, altura, tela=None):
         if coluna and coluna not in valores and coluna not in colunas_brancas \
                 and len(numero.glifos) == 1:
             valores[coluna] = 0
-    return valores or None
+    return valores
+
+
+# ---------------------------------------------------------------- os dois times
+
+def ler_times(linhas, largura, altura, tela):
+    """Todas as 10 linhas do placar: {"aliados": [...], "inimigos": [...]}.
+
+    Cada jogador: posição, se é você, os seis números, o retrato recortado
+    (RGB), o resumo do retrato para comparação, os símbolos das vantagens e o
+    nome lido (a fonte dos nomes é estilizada: às vezes vem errado ou vazio).
+    O herói é identificado depois (retratos.identificar)."""
+    from .retratos import simbolos_de_vantagem, vetor_retrato
+
+    geometria = tela_do_placar(linhas, altura)
+    if geometria is None or tela is None:
+        return None
+    y_voce = linha_do_jogador(geometria, altura, tela)
+    if y_voce is None:
+        return None
+    lado = int(LADO_RETRATO * altura)
+    vantagens_x = (geometria.ancoras[0] - 0.78 * geometria.passo, geometria.ancoras[0] - 0.08 * geometria.passo)
+    times = {}
+    for time, ys in (("aliados", geometria.linhas_y), ("inimigos", geometria.inimigos_y)):
+        jogadores = []
+        for posicao, y in enumerate(ys):
+            inicio = _inicio_da_linha(tela, y, vantagens_x[0])
+            if inicio is None:
+                return None  # não parece o placar completo
+            x_retrato = inicio + int(FAIXA_FUNCAO * altura)
+            retrato = tela.rgb(x_retrato, int(y - lado / 2), lado, lado)
+            jogadores.append({
+                "posicao": posicao,
+                "voce": time == "aliados" and y == y_voce,
+                "valores": ler_linha(linhas, geometria, y, tela),
+                "retrato": retrato, "lado": lado,
+                "vetor": vetor_retrato(retrato, lado, lado),
+                "vantagens": simbolos_de_vantagem(tela.bgra, tela.largura, *vantagens_x, y, RAIO_VANTAGEM * altura),
+                "nome": _nome(linhas, x_retrato + lado, vantagens_x[0], y, geometria),
+            })
+        times[time] = jogadores
+    return times
+
+
+def _inicio_da_linha(tela, y, ate):
+    """x onde começa a linha: a faixa colorida da função (verde ou vermelha)."""
+    base = int(y) * tela.largura
+    for x in range(0, int(ate)):
+        k = (base + x) * 4
+        b, g, r = tela.bgra[k], tela.bgra[k + 1], tela.bgra[k + 2]
+        if max(r, g, b) > 140 and max(r, g, b) - min(r, g, b) > 80:
+            return x
+    return None
+
+
+RE_NOME = re.compile(r"[^\w#.\-]")
+
+
+def _nome(linhas, x0, x1, y, geometria):
+    """Nome do jogador: o texto de cima na área entre o retrato e as vantagens."""
+    candidatos = []
+    for linha in linhas:
+        centro = linha.y + linha.altura / 2
+        if x0 <= linha.x < x1 and y - geometria.altura_linha * 0.7 <= centro <= y + 0.1 * geometria.altura_linha:
+            texto = RE_NOME.sub("", linha.texto)
+            if len(texto) >= 3:
+                candidatos.append((linha.y, texto))
+    return min(candidatos)[1] if candidatos else None

@@ -25,6 +25,7 @@ const app = {
   estado: null,
   versao: -1,
   ultimoAviso: null,
+  jogadores: {},  // times de cada partida, carregados sob demanda
   filtros: carregarFiltros(),
   ref: {},  // índices do catálogo
 };
@@ -139,7 +140,7 @@ function linhaPartida(p, completa = false) {
        <div class="stat"><b>${p.assistencias ?? "—"}</b><small>Assist.</small></div>
        <div class="stat"><b>${p.mortes ?? "—"}</b><small>Mortes</small></div>`
     : `<div class="stat"><b>${p.eliminacoes === null && p.mortes === null ? "—" : eam}</b><small>E / A / M</small></div>`;
-  return `<div class="partida ${classe}" data-editar="${p.id}" title="Clique para corrigir">
+  return `<div class="partida ${classe}" data-abrir="${p.id}" title="Ver a partida">
     ${m ? `<img class="mapa-fundo" src="${m.imagem}" alt="">` : ""}
     <div class="faixa"></div>
     ${h ? `<img class="retrato" src="${h.retrato}" alt="">` : `<div class="retrato"></div>`}
@@ -407,7 +408,7 @@ function paginaHeroi(id) {
 function linhaPartidaCurta(p) {
   const m = mapaDe(p), modo = m ? app.ref.modo[m.modo] : null;
   const classe = { "Vitória": "vitoria", "Derrota": "derrota", "Empate": "empate" }[p.resultado];
-  return `<div class="partida ${classe}" data-editar="${p.id}" style="grid-template-columns:4px minmax(0,1fr) 70px 78px">
+  return `<div class="partida ${classe}" data-abrir="${p.id}" style="grid-template-columns:4px minmax(0,1fr) 70px 78px">
     ${m ? `<img class="mapa-fundo" src="${m.imagem}" alt="">` : ""}
     <div class="faixa"></div>
     <div class="quem"><b>${esc(m ? m.nome : p.mapa)}</b><span>${modo ? `<img src="${modo.icone}" alt="">${esc(modo.nome)}` : ""} · ${esc(p.modo)}</span></div>
@@ -435,6 +436,105 @@ function paginaMapas() {
           <small><span>${esc(m.pais)}</span><span>${x.length ? `${x.length} jogo${x.length > 1 ? "s" : ""} · <b style="color:${corTaxa(t)};font:inherit">${pct(t)}</b>` : "nunca jogado"}</span></small></a>`;
       }).join("")}</div></section>`;
   }).join("")}`;
+}
+
+// ------------------------------------------------------------------ partida (os dois times)
+
+const FONTES = {
+  voce: ["Você", "o seu herói, pelas legendas"],
+  legendas: ["Legendas", "o jogador falou nas legendas com esse herói"],
+  retrato: ["Retrato", "retrato reconhecido de partidas anteriores"],
+  vantagens: ["Vantagens", "reconhecido pelos ícones de vantagem (pode errar)"],
+  corrigido: ["Corrigido", "corrigido por você"],
+};
+
+function carregarJogadores(id) {
+  if (app.jogadores[id] !== undefined) return app.jogadores[id];
+  app.jogadores[id] = null;  // carregando
+  api.ler(`/api/partidas/${id}/jogadores`).then((lista) => {
+    app.jogadores[id] = lista;
+    if (rota().pagina === "partidas") desenhar();
+  });
+  return null;
+}
+
+function paginaPartida(id) {
+  const p = app.partidas.find((x) => x.id === Number(id));
+  if (!p) return `<div class="vazio">Partida não encontrada.</div>`;
+  const h = heroiDe(p), m = mapaDe(p), modo = m ? app.ref.modo[m.modo] : null;
+  const classe = { "Vitória": "vitoria", "Derrota": "derrota", "Empate": "empate" }[p.resultado];
+  const jogadores = p.tem_times ? carregarJogadores(p.id) : [];
+  const times = jogadores ? { aliados: jogadores.filter((j) => j.time === "aliados"), inimigos: jogadores.filter((j) => j.time === "inimigos") } : null;
+  return `
+  <div class="topo"><a class="botao" href="#/historico">← Histórico</a>
+    <div class="filtros"><button class="botao" data-editar-partida="${p.id}">Corrigir partida</button></div></div>
+  <section class="cabeca-mapa cabeca-partida ${classe}">
+    ${m ? `<img class="fundo" src="${m.imagem}" alt="">` : ""}
+    ${h ? `<img class="retrato-grande" src="${h.retrato}" alt="">` : ""}
+    <div>
+      <div class="resultado-grande">${esc(p.resultado)}</div>
+      <h1>${esc(h ? h.nome : p.heroi)} <span>em</span> ${esc(m ? m.nome : p.mapa)}</h1>
+      <div class="chips-info">
+        ${modo ? `<span class="chip"><img src="${modo.icone}" alt="">${esc(modo.nome)}</span>` : ""}
+        <span class="chip">${esc(p.modo)}</span>
+        <span class="chip">${quando(p.data_hora)}</span>
+        ${p.observacao ? `<span class="chip">${esc(p.observacao)}</span>` : ""}
+      </div>
+    </div>
+  </section>
+  ${!p.tem_times
+    ? `<section class="painel"><div class="vazio">O placar dos dois times não foi capturado nesta partida.<br>
+        Aperte <kbd>Tab</kbd> durante a partida e quando aparecer o resultado: o app registra aliados e inimigos.</div></section>`
+    : !times ? `<section class="painel"><div class="vazio">Carregando os times…</div></section>`
+    : `<div class="times">${painelTime("Seu time", "aliados", times.aliados, p)}${painelTime("Time inimigo", "inimigos", times.inimigos, p)}</div>
+       <div class="nota-times">Herói errado ou desconhecido? Escolha o certo na lista: o app guarda esse retrato e passa a reconhecê-lo sozinho.</div>`}`;
+}
+
+function painelTime(titulo, time, lista, p) {
+  const soma = (c) => lista.reduce((s, j) => s + (j[c] || 0), 0);
+  const herois = [...app.catalogo.herois].sort((a, b) => a.nome.localeCompare(b.nome));
+  return `<section class="painel time ${time}">
+    <header><h2>${titulo}</h2><small>E ${soma("eliminacoes")} · M ${soma("mortes")} · Dano ${fmt(soma("dano"))} · Cura ${fmt(soma("cura"))}</small></header>
+    <div class="jogadores">
+      <div class="jogador cabecalho"><span></span><span></span><span>E</span><span>A</span><span>M</span><span>Dano</span><span>Cura</span><span>Mit.</span></div>
+      ${lista.map((j) => {
+        // Sem herói, mostra a função esperada pela posição (tanque, dano, dano, suporte, suporte).
+        const h = app.ref.heroi[j.heroi_id];
+        const f = app.ref.funcao[h ? h.funcao : ["tank", "damage", "damage", "support", "support"][j.posicao]];
+        const [fonte, explica] = FONTES[j.fonte] || ["?", "herói não identificado"];
+        const nomeConfiavel = ["voce", "legendas"].includes(j.fonte);
+        return `<div class="jogador ${j.voce ? "voce" : ""}">
+          <img class="retrato" src="/api/retratos/${p.id}/${time}/${j.posicao}.png?v=${app.versao}" alt="">
+          <div class="quem">
+            <div class="linha-heroi">${f ? `<img src="${f.icone}" alt="">` : ""}
+              <select data-corrigir="${p.id}/${time}/${j.posicao}" title="Corrigir o herói">
+                <option value="" ${h ? "" : "selected"}>Não identificado</option>
+                ${herois.map((x) => `<option value="${x.id}" ${h && h.id === x.id ? "selected" : ""}>${esc(x.nome)}</option>`).join("")}
+              </select>
+              <span class="fonte f-${j.fonte || "nada"}" title="${esc(explica)}">${esc(fonte)}</span></div>
+            <div class="linha-nome">
+              <small class="${nomeConfiavel ? "" : "nome-incerto"}" title="${nomeConfiavel ? "" : "nome lido do placar (a fonte estilizada pode atrapalhar)"}">${esc(j.nome || "—")}</small>
+              ${vantagensHtml(h, j.vantagens)}
+            </div>
+          </div>
+          ${["eliminacoes", "assistencias", "mortes"].map((c) => `<b>${j[c] ?? "—"}</b>`).join("")}
+          ${["dano", "cura", "mitigado"].map((c) => `<b>${fmt(j[c])}</b>`).join("")}
+        </div>`;
+      }).join("")}
+    </div></section>`;
+}
+
+function vantagensHtml(heroi, escolhidas) {
+  // Ícones das vantagens escolhidas (lidas no Tab), menor antes da maior.
+  if (!heroi || !escolhidas?.length) return "";
+  const porId = Object.fromEntries(heroi.habilidades.map((a) => [a.id, a]));
+  const ordem = { vantagem_menor: 0, vantagem_maior: 1 };
+  return `<span class="vantagens-jogador">${[...escolhidas].sort((a, b) => ordem[a.tipo] - ordem[b.tipo]).map((v) => {
+    const a = porId[v.id] || {};
+    const tipo = v.tipo === "vantagem_maior" ? "Vantagem maior" : "Vantagem menor";
+    return `<span class="vantagem ${v.tipo}" title="${esc(`${tipo}: ${v.nome}${a.descricao ? ` — ${a.descricao}` : ""}`)}">
+      ${a.icone ? `<img src="${a.icone}" alt="">` : esc(v.nome[0])}</span>`;
+  }).join("")}</span>`;
 }
 
 function paginaMapa(id) {
@@ -587,8 +687,9 @@ async function salvarEdicao(id) {
 
 // ------------------------------------------------------------------ navegação e eventos
 
-const paginas = { dashboard: paginaDashboard, historico: paginaHistorico, herois: paginaHerois, mapas: paginaMapas, ajustes: paginaAjustes };
-const detalhes = { herois: paginaHeroi, mapas: paginaMapa };  // #/herois/<id>, #/mapas/<id>
+const paginas = { dashboard: paginaDashboard, historico: paginaHistorico, herois: paginaHerois, mapas: paginaMapas, ajustes: paginaAjustes, partidas: paginaHistorico };
+const detalhes = { herois: paginaHeroi, mapas: paginaMapa, partidas: paginaPartida };  // #/<pagina>/<id>
+const MENU_DE = { partidas: "historico" };  // item do menu aceso em cada página
 function rota() {
   const [, pagina = "dashboard", id] = location.hash.split("/");
   return { pagina: paginas[pagina] ? pagina : "dashboard", id };
@@ -596,14 +697,14 @@ function rota() {
 function desenhar() {
   if (!app.catalogo) return;
   const { pagina, id } = rota();
-  document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("ativo", a.dataset.pagina === pagina));
+  document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("ativo", a.dataset.pagina === (MENU_DE[pagina] || pagina)));
   const foco = document.activeElement?.id;
   document.getElementById("pagina").innerHTML = id && detalhes[pagina] ? detalhes[pagina](decodeURIComponent(id)) : paginas[pagina]();
   if (foco === "busca") { const b = document.getElementById("busca"); b.focus(); b.setSelectionRange(b.value.length, b.value.length); }
 }
 
 document.addEventListener("click", async (e) => {
-  const alvo = e.target.closest("button, [data-editar], [data-fechar]");
+  const alvo = e.target.closest("button, [data-abrir], [data-fechar]");
   if (!alvo) return;
   const d = alvo.dataset;
   const chips = alvo.closest("[data-filtro]");
@@ -613,7 +714,8 @@ document.addEventListener("click", async (e) => {
     alvo.parentElement.querySelectorAll("button").forEach((b) => b.classList.toggle("ativo", b === alvo));
     return;
   }
-  if (d.editar !== undefined && alvo.classList.contains("partida")) return abrirEdicao(Number(d.editar));
+  if (d.abrir !== undefined && alvo.classList.contains("partida")) { location.hash = `#/partidas/${d.abrir}`; return; }
+  if (d.editarPartida) return abrirEdicao(Number(d.editarPartida));
   if (d.nova !== undefined) return abrirEdicao(null);
   if (d.fechar !== undefined) return fecharModal();
   if (d.salvar !== undefined) return salvarEdicao(d.salvar ? Number(d.salvar) : null);
@@ -636,6 +738,12 @@ document.addEventListener("click", async (e) => {
     await atualizarEstado(); return mostrarToast("Nome salvo.");
   }
   if (d.pasta !== undefined) return api.enviar("POST", "/api/pasta-diagnostico");
+  if (d.reiniciar !== undefined) {
+    alvo.disabled = true;
+    alvo.textContent = "Reiniciando…";
+    await api.enviar("POST", "/api/reiniciar");
+    return;  // a página se recarrega quando o serviço novo responder
+  }
   if (d.sair !== undefined) {
     if (!confirm("Encerrar o OW Tracker? As partidas deixam de ser registradas até você abrir o app de novo.")) return;
     await api.enviar("POST", "/api/sair");
@@ -644,6 +752,17 @@ document.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  const corrigir = e.target.dataset.corrigir;
+  if (corrigir) {  // herói de um jogador da partida: "<partida>/<time>/<posição>"
+    const [partida, time, posicao] = corrigir.split("/");
+    try {
+      await api.enviar("PUT", `/api/partidas/${partida}/jogadores/${time}/${posicao}`, { heroi_id: e.target.value });
+      delete app.jogadores[partida];
+      desenhar();
+      mostrarToast(e.target.value ? "Herói corrigido. Esse retrato será reconhecido nas próximas partidas." : "Herói removido.");
+    } catch (erro) { mostrarToast(erro.message); }
+    return;
+  }
   const campo = e.target.dataset.ajuste;
   if (!campo) return;
   try {
@@ -686,6 +805,10 @@ async function atualizarEstado() {
   try {
     const anterior = JSON.stringify([app.estado?.parcial, app.estado?.pendente]);
     app.estado = await api.ler("/api/estado");
+    // O serviço reiniciou (versão nova): recarrega a página para pegar tudo novo.
+    if (app.inicioServico && app.estado.inicio !== app.inicioServico) return location.reload();
+    app.inicioServico = app.estado.inicio;
+    document.getElementById("atualizacao").hidden = !app.estado.atualizacao;
     if (app.estado.versao !== app.versao) await recarregarPartidas();
     else if (JSON.stringify([app.estado.parcial, app.estado.pendente]) !== anterior && rota().pagina === "dashboard") {
       const bloco = document.getElementById("ao-vivo");
@@ -705,6 +828,7 @@ async function atualizarEstado() {
 async function recarregarPartidas() {
   app.partidas = await api.ler("/api/partidas");
   app.versao = app.estado ? app.estado.versao : app.versao;
+  app.jogadores = {};  // os times podem ter mudado (ex.: Tab depois do fim)
   if (document.getElementById("modal").hidden) desenhar();
 }
 

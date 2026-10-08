@@ -10,6 +10,8 @@ encerrar de vez, use "Sair" nos Ajustes.
 
 import json
 import logging
+import os
+import subprocess
 import sys
 import urllib.request
 from datetime import datetime
@@ -20,7 +22,10 @@ from .banco import PASTA_DADOS
 from .servico import Servico
 from .servidor import criar_servidor, rodar_em_segundo_plano
 
-PORTA = 47815
+# Para desenvolvimento: OWTRACKER_PORTA muda a porta e OWTRACKER_SEM_MONITOR=1
+# sobe só a interface (sem ler o jogo), sem atrapalhar a cópia em uso.
+PORTA = int(os.environ.get("OWTRACKER_PORTA", "47815"))
+SEM_MONITOR = os.environ.get("OWTRACKER_SEM_MONITOR") == "1"
 URL = f"http://127.0.0.1:{PORTA}/"
 PASTA_CAPTURAS = Path(__file__).resolve().parent.parent / "capturas"
 
@@ -69,7 +74,8 @@ def main():
     servico = Servico()
     servidor = criar_servidor(servico, PORTA)
     rodar_em_segundo_plano(servidor)
-    servico.iniciar()
+    if not SEM_MONITOR:
+        servico.iniciar()
 
     atalhos = janelas.Atalhos(ao_atalho)
     for nome, (modificadores, tecla) in ATALHOS.items():
@@ -87,4 +93,15 @@ def main():
         pass
     atalhos.parar()
     servico.parar()
+    if servico.monitor.is_alive():
+        servico.monitor.join(timeout=10)  # deixa o monitor salvar o que aprendeu
     servidor.shutdown()
+    servidor.server_close()  # libera a porta para a nova cópia
+    if servico.reiniciar:
+        # Código atualizado: abre uma cópia nova em segundo plano. A janela
+        # da interface continua aberta e se reconecta sozinha.
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        executavel = pythonw if pythonw.exists() else Path(sys.executable)
+        subprocess.Popen([str(executavel), "-m", "owtracker", "--minimizado"],
+                         cwd=str(Path(__file__).resolve().parent.parent),
+                         creationflags=subprocess.DETACHED_PROCESS)

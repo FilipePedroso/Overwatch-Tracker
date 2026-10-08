@@ -1,10 +1,11 @@
 """Armazenamento das partidas em SQLite (arquivo local, sem servidor)."""
 
+import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from . import catalogo
+from . import catalogo, janelas
 
 PASTA_DADOS = Path(__file__).resolve().parent.parent / "dados"
 ARQUIVO_BANCO = PASTA_DADOS / "partidas.db"
@@ -21,6 +22,24 @@ CREATE TABLE IF NOT EXISTS partidas (
     observacao TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_partidas_data ON partidas (data_hora);
+
+-- Os 10 jogadores da partida, lidos no Tab (aliados e inimigos).
+CREATE TABLE IF NOT EXISTS jogadores (
+    partida_id   INTEGER NOT NULL REFERENCES partidas(id) ON DELETE CASCADE,
+    time         TEXT    NOT NULL CHECK (time IN ('aliados', 'inimigos')),
+    posicao      INTEGER NOT NULL,          -- 0 a 4, de cima para baixo
+    voce         INTEGER NOT NULL DEFAULT 0,
+    heroi_id     TEXT,                      -- NULL = não identificado
+    fonte        TEXT,                      -- voce, legendas, retrato, vantagens, corrigido
+    nome         TEXT,
+    eliminacoes  INTEGER, assistencias INTEGER, mortes INTEGER,
+    dano         INTEGER, cura INTEGER, mitigado INTEGER,
+    retrato      BLOB,                      -- PNG recortado do placar
+    vetor        TEXT,                      -- resumo do retrato (JSON), para reaprender
+    vantagens    TEXT,                      -- vantagens escolhidas (JSON: id, nome, tipo)
+    simbolos     TEXT,                      -- formas dos ícones lidos (JSON), para renomear
+    PRIMARY KEY (partida_id, time, posicao)
+);
 """
 
 # Placar (Tab) da sua linha; vazio (NULL) quando não foi lido.
@@ -55,6 +74,10 @@ class Banco:
             for coluna in ("heroi_id", "mapa_id"):
                 if coluna not in existentes:
                     self.con.execute(f"ALTER TABLE partidas ADD COLUMN {coluna} TEXT")
+            de_jogadores = {linha["name"] for linha in self.con.execute("PRAGMA table_info(jogadores)")}
+            for coluna in ("vantagens", "simbolos"):
+                if coluna not in de_jogadores:
+                    self.con.execute(f"ALTER TABLE jogadores ADD COLUMN {coluna} TEXT")
 
     def _ligar_referencia(self):
         """Preenche heroi_id/mapa_id das partidas que ainda não têm."""
@@ -105,11 +128,74 @@ class Banco:
                 (*(placar[c] for c in colunas), id_partida),
             )
 
+    # ------------------------------------------------------------ jogadores
+
+    def salvar_jogadores(self, id_partida, times):
+        """Grava (substituindo) os dois times lidos no Tab."""
+        linhas = []
+        for time in ("aliados", "inimigos"):
+            for j in times.get(time, []):
+                v = j.get("valores", {})
+                linhas.append((
+                    id_partida, time, j["posicao"], int(bool(j.get("voce"))), j.get("heroi_id"),
+                    j.get("fonte"), j.get("nome"), *(v.get(c) for c in COLUNAS_PLACAR),
+                    janelas.png_bytes(j["lado"], j["lado"], j["retrato"]), json.dumps(j["vetor"]),
+                    json.dumps(j.get("escolhidas", [])), json.dumps(j.get("vantagens", [])),
+                ))
+        with self.con:
+            self.con.execute("DELETE FROM jogadores WHERE partida_id = ?", (id_partida,))
+            self.con.executemany(
+                "INSERT INTO jogadores (partida_id, time, posicao, voce, heroi_id, fonte, nome, "
+                + ", ".join(COLUNAS_PLACAR) + ", retrato, vetor, vantagens, simbolos) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", linhas)
+
+    def jogadores(self, id_partida):
+        jogadores = [dict(j) for j in self.con.execute(
+            "SELECT partida_id, time, posicao, voce, heroi_id, fonte, nome, vantagens, "
+            + ", ".join(COLUNAS_PLACAR) + " FROM jogadores WHERE partida_id = ? "
+            "ORDER BY time, posicao", (id_partida,))]
+        for j in jogadores:
+            j["vantagens"] = json.loads(j["vantagens"] or "[]")
+        return jogadores
+
+    def definir_vantagens_jogador(self, id_partida, time, posicao, vantagens):
+        with self.con:
+            self.con.execute(
+                "UPDATE jogadores SET vantagens = ? WHERE partida_id = ? AND time = ? AND posicao = ?",
+                (json.dumps(vantagens), id_partida, time, posicao))
+
+    def retrato(self, id_partida, time, posicao):
+        linha = self.con.execute(
+            "SELECT retrato FROM jogadores WHERE partida_id = ? AND time = ? AND posicao = ?",
+            (id_partida, time, posicao)).fetchone()
+        return linha["retrato"] if linha else None
+
+    def definir_heroi_jogador(self, id_partida, time, posicao, heroi_id):
+        """Corrige o herói de um jogador. Retorna (herói antigo, fonte antiga,
+        vetor do retrato, símbolos das vantagens) para reaprender, ou None."""
+        linha = self.con.execute(
+            "SELECT heroi_id, fonte, vetor, simbolos FROM jogadores "
+            "WHERE partida_id = ? AND time = ? AND posicao = ?",
+            (id_partida, time, posicao)).fetchone()
+        if not linha:
+            return None
+        with self.con:
+            self.con.execute(
+                "UPDATE jogadores SET heroi_id = ?, fonte = 'corrigido' "
+                "WHERE partida_id = ? AND time = ? AND posicao = ?",
+                (heroi_id or None, id_partida, time, posicao))
+        return (linha["heroi_id"], linha["fonte"], json.loads(linha["vetor"] or "[]"),
+                json.loads(linha["simbolos"] or "[]"))
+
+    def partidas_com_jogadores(self):
+        return {r[0] for r in self.con.execute("SELECT DISTINCT partida_id FROM jogadores")}
+
     def obter(self, id_partida):
         return self.con.execute("SELECT * FROM partidas WHERE id = ?", (id_partida,)).fetchone()
 
     def apagar(self, id_partida):
         with self.con:
+            self.con.execute("DELETE FROM jogadores WHERE partida_id = ?", (id_partida,))
             self.con.execute("DELETE FROM partidas WHERE id = ?", (id_partida,))
 
     def listar_completo(self):

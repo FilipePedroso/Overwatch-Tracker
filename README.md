@@ -63,6 +63,19 @@ só com o Overwatch em primeiro plano:
     **último Tab aberto** são gravados junto com ela. Coluna não lida fica vazia.
   - Durante a partida, ela aparece em azul no topo do Histórico ("em andamento"),
     atualizada a cada Tab.
+  - **Os dois times**: o Tab também é lido por inteiro (no máximo a cada 2,5 s):
+    os números dos 10 jogadores, o retrato de cada um e o nome. Clique numa partida
+    no Histórico para ver aliados e inimigos. O placar não escreve o herói, então
+    ele é identificado (`retratos.py`) por: você e aliados que falaram nas legendas;
+    biblioteca de retratos aprendida (o mesmo herói com a mesma skin tem sempre o
+    mesmo retrato); ícones de vantagem comparados pela forma, limitados à função da
+    linha. Herói errado/desconhecido: escolha o certo na página da partida e o app
+    aprende aquele retrato. Os nomes vêm da fonte estilizada e podem sair errados
+    (os confirmados pelas legendas são confiáveis).
+  - **Vantagens escolhidas** de cada jogador: com o herói conhecido, cada ícone é
+    comparado só com as 4 vantagens dele (menor/maior) e aparece na página da partida.
+  - Partida registrada sem os times? Se o diagnóstico salvou um print do Tab:
+    `python ferramentas/recuperar_times.py <id da partida> capturas/diagnostico/<print>_placar.png`
   - **Dica: aperte Tab quando aparecer DERROTA/VITÓRIA.** O placar ainda abre por
     uns 20 s depois do fim, com os números finais, e eles corrigem o registro.
   - Em cada Tab aberto vale o valor mais repetido entre as leituras, então uma

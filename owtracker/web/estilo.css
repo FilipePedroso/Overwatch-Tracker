@@ -304,6 +304,58 @@ main { padding: 24px 28px 40px; display: flex; flex-direction: column; gap: 20px
 .cabeca-mapa h1 { font-size: 46px; font-style: italic; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,.8); }
 .cabeca-mapa p { color: var(--texto-2); margin-top: 10px; max-width: 620px; }
 .cabeca-mapa .chip { background: rgba(19,26,38,.85); }
+/* página da partida */
+.cabeca-partida { gap: 22px; align-items: flex-end; }
+.cabeca-partida .retrato-grande { position: relative; z-index: 2; }
+.cabeca-partida h1 span { font-size: 26px; color: var(--texto-2); }
+.resultado-grande { font: italic 700 22px "Barlow Condensed"; letter-spacing: .08em; text-transform: uppercase; }
+.cabeca-partida.vitoria .resultado-grande { color: var(--vitoria); }
+.cabeca-partida.derrota .resultado-grande { color: var(--derrota); }
+.cabeca-partida.vitoria { border-color: rgba(53,208,138,.45); }
+.cabeca-partida.derrota { border-color: rgba(240,80,90,.45); }
+.times { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.time.aliados > header h2 { color: var(--vitoria); }
+.time.inimigos > header h2 { color: var(--derrota); }
+.jogadores { display: flex; flex-direction: column; gap: 4px; padding: 0 10px 12px; }
+.jogador {
+  display: grid; grid-template-columns: 46px minmax(140px, 1fr) repeat(3, 30px) repeat(3, 58px);
+  gap: 10px; align-items: center; padding: 6px 10px 6px 6px; border-radius: 8px; background: var(--painel-2);
+}
+.time.aliados .jogador:not(.cabecalho) { box-shadow: inset 3px 0 0 rgba(53,208,138,.6); }
+.time.inimigos .jogador:not(.cabecalho) { box-shadow: inset 3px 0 0 rgba(240,80,90,.6); }
+.jogador.voce { background: rgba(249,158,26,.1); outline: 1px solid rgba(249,158,26,.45); }
+.jogador.cabecalho { background: none; padding-top: 0; padding-bottom: 0; color: var(--texto-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.jogador > b, .jogador.cabecalho > span { text-align: right; font: 600 16px "Barlow Condensed"; }
+.jogador.cabecalho > span { font: 600 11px Inter; }
+.jogador .retrato { width: 46px; height: 46px; border-radius: 6px; }
+.jogador .quem { min-width: 0; }
+.linha-heroi { display: flex; align-items: center; gap: 6px; }
+.linha-heroi img { width: 14px; height: 14px; opacity: .8; }
+.linha-heroi select {
+  background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 1px 4px; margin-left: -5px;
+  font: 600 16px "Barlow Condensed"; text-transform: uppercase; cursor: pointer; max-width: 150px; color: var(--texto);
+}
+.linha-heroi select:hover, .linha-heroi select:focus { border-color: var(--borda); background: var(--painel-3); outline: none; }
+.linha-heroi select option { background: var(--painel-2); text-transform: none; font: 13px Inter; }
+.fonte { font: 700 9px Inter; letter-spacing: .06em; text-transform: uppercase; padding: 2px 5px; border-radius: 4px; background: var(--painel-3); color: var(--texto-3); white-space: nowrap; }
+.fonte.f-voce, .fonte.f-corrigido { color: var(--laranja); background: rgba(249,158,26,.14); }
+.fonte.f-legendas, .fonte.f-retrato { color: var(--vitoria); background: rgba(53,208,138,.12); }
+.fonte.f-vantagens { color: #9ec5ff; background: rgba(78,163,255,.14); }
+.fonte.f-nada { color: var(--derrota); background: rgba(240,80,90,.12); }
+.jogador .quem small { color: var(--texto-2); font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jogador .quem small.nome-incerto { color: var(--texto-3); font-style: italic; }
+.nota-times { color: var(--texto-3); font-size: 12px; text-align: center; }
+.linha-nome { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.linha-nome small { min-width: 0; }
+.vantagens-jogador { display: inline-flex; gap: 4px; flex: none; }
+.vantagem {
+  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; cursor: help;
+  background: #0e131d; border: 1px solid #3a4560; font: 700 10px Inter; color: var(--texto-2);
+}
+.vantagem img { width: 13px; height: 13px; }
+.vantagem.vantagem_maior { border-color: rgba(249,158,26,.7); }
+@media (max-width: 1350px) { .times { grid-template-columns: 1fr; } }
+
 a.item { color: inherit; border-radius: 8px; padding: 4px; margin: -4px; }
 a.item:hover { background: var(--painel-2); }
 .mapa b { font: 600 19px "Barlow Condensed"; text-transform: uppercase; }
@@ -356,6 +408,15 @@ a.item:hover { background: var(--painel-2); }
 .interruptor input:checked + span::before { transform: translateX(20px); }
 .atalhos { color: var(--texto-2); font-size: 13px; padding: 0 16px 16px; display: grid; gap: 6px; }
 kbd { background: var(--painel-2); border: 1px solid var(--borda); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; font: 600 12px Inter; }
+
+/* aviso de atualização do app */
+.atualizacao {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 40;
+  display: flex; align-items: center; gap: 16px; padding: 10px 12px 10px 18px; border-radius: 10px;
+  background: var(--painel-3); border: 1px solid var(--laranja); box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  max-width: calc(100vw - 32px);
+}
+.atualizacao[hidden] { display: none; }
 
 /* toast */
 .toast {

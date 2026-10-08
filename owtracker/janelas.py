@@ -157,8 +157,8 @@ def capturar_tela_bgra(x, y, largura, altura):
     return bgra.raw
 
 
-def salvar_png(caminho, largura, altura, rgb):
-    """Encoder PNG mínimo (RGB 8 bits, sem filtro)."""
+def png_bytes(largura, altura, rgb):
+    """Encoder PNG mínimo (RGB 8 bits, sem filtro). Retorna o arquivo em bytes."""
     passo = largura * 3
     visao = memoryview(rgb)
     cru = b"".join(b"\x00" + visao[i * passo:(i + 1) * passo] for i in range(altura))
@@ -168,8 +168,10 @@ def salvar_png(caminho, largura, altura, rgb):
         return struct.pack(">I", len(dados)) + tipo + dados + struct.pack(">I", crc)
 
     cabecalho = struct.pack(">IIBBBBB", largura, altura, 8, 2, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + bloco(b"IHDR", cabecalho)
+            + bloco(b"IDAT", zlib.compress(cru, 6)) + bloco(b"IEND", b""))
+
+
+def salvar_png(caminho, largura, altura, rgb):
     with open(caminho, "wb") as arq:
-        arq.write(b"\x89PNG\r\n\x1a\n")
-        arq.write(bloco(b"IHDR", cabecalho))
-        arq.write(bloco(b"IDAT", zlib.compress(cru, 6)))
-        arq.write(bloco(b"IEND", b""))
+        arq.write(png_bytes(largura, altura, rgb))
