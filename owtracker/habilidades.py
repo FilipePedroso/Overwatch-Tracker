@@ -37,6 +37,10 @@ SO_QUANDO_DESTRUIDA = re.compile(r"^\s*\d+(?:\.\d+)?\s*seconds?\s*(?:;;|\()\s*de
 
 # Correções dos dados da wiki (herói -> habilidades a acrescentar/ajustar).
 CORRECOES = {
+    # A wiki ainda não tem a recarga dos Drones (~14 s segundo a Fandom; o
+    # registro de teclas, dados/teclas.log, permite conferir).
+    "doctrine": [{"id": "invigorating-drones", "nome": "Drones Revigorantes", "tipo": "habilidade",
+                  "slot": "ability 2", "recarga": 14.0}],
     # A Forma Nêmesis (Shift) não veio da wiki; a suprema veio como "ability 3".
     "ramattra": [{"id": "nemesis-form", "nome": "Forma Nêmesis", "tipo": "habilidade",
                   "slot": "ability 1", "recarga": 8.0}],

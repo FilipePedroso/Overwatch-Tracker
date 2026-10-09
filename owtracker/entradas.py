@@ -38,7 +38,8 @@ class Entradas(threading.Thread):
         self._parar.set()
 
     def pegar(self):
-        """Apertos desde a última chamada: [(tecla, instante monotonic)]."""
+        """Apertos desde a última chamada: [(tecla, instante monotonic, chat_aberto)].
+        Enter e Esc vêm junto (só para o registro de teclas)."""
         lista = []
         while self._apertos:
             lista.append(self._apertos.popleft())
@@ -71,5 +72,4 @@ class Entradas(threading.Thread):
             self.chat_aberto_desde = None if self.chat_aberto_desde else agora
         elif nome == "esc":
             self.chat_aberto_desde = None
-        elif not self.chat_aberto_desde:
-            self._apertos.append((nome, agora))
+        self._apertos.append((nome, agora, self.chat_aberto_desde is not None))

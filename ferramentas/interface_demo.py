@@ -42,7 +42,7 @@ def partida_de_teste(s, print_do_tab):
     fala("[FILIPE (SOMBRA)] Boop.", 150)
     fala("[FILIPE (SOMBRA)] Sistemas hackeados.", 160)
     # apertos de tecla simulados (o E repetido dentro da recarga conta uma vez só)
-    detector.teclas([("e", 163.2), ("e", 163.4), ("shift", 164.0), ("botao_direito", 165.0), ("e", 179.9)])
+    detector.teclas([(t, q, False) for t, q in [("e", 163.2), ("e", 163.4), ("shift", 164.0), ("botao_direito", 165.0), ("e", 179.9)]])
     tela = Tela(ocr, bgra, largura, altura, s.monitor.reconhecedor)
     detector.processar(ocr.ler(bgra, largura, altura), largura, altura, 400, True, tela=tela)
     registro, _ = detector.processar([Linha("[ATHENA] Vitória.", 800, 1030, 300, 18)], largura, altura, 600, False)

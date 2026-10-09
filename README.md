@@ -135,6 +135,12 @@ página do herói ("Uso de habilidades": média por partida, total, máximo e as
   (o botão direito da Lifeweaver, por exemplo), habilidades sem recarga ou com
   recarga muito curta, e barreiras de segurar (Reinhardt, Brigitte...).
 
+Com o modo diagnóstico ligado, `dados/teclas.log` grava cada tecla de
+habilidade e o que o detector fez com ela: contou, estava em recarga, chat
+aberto, morto, aguardando confirmar o herói. Grava também quando o HUD mostra a
+suprema pronta e quando ela deixa de estar pronta, com ou sem Q. Só as teclas
+de habilidade, Enter e Esc entram no registro, nunca o que você digita.
+
 ## Modo diagnóstico (ligado por padrão nesta fase)
 
 Para calibrar com as telas reais do jogo, o app guarda:

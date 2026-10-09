@@ -11,7 +11,7 @@ import ctypes
 import json
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import digitos, janelas, retratos
@@ -26,6 +26,7 @@ from .ocr import OCR, Linha
 ARQUIVO_CONFIG = PASTA_DADOS / "config.json"
 PASTA_DIAGNOSTICO = Path(__file__).resolve().parent.parent / "capturas" / "diagnostico"
 LOG_DIAGNOSTICO = PASTA_DADOS / "diagnostico.log"
+LOG_TECLAS = PASTA_DADOS / "teclas.log"  # teclas de habilidade e o que o detector fez com cada uma
 ARQUIVO_DIGITOS = PASTA_DADOS / "digitos.json"  # modelos aprendidos do reconhecedor
 
 CONFIG_PADRAO = {"diagnostico": True, "nome_jogador": "", "partidas_por_falante": {}}
@@ -181,6 +182,7 @@ class Monitor(threading.Thread):
                 apertos = self.entradas.pegar()
                 if apertos:
                     detector.teclas(apertos)
+                self._gravar_eventos(detector)
                 jogo = jogo_em_foco()
                 if not jogo:
                     if estado_anterior != "fora":
@@ -227,7 +229,12 @@ class Monitor(threading.Thread):
                 self.avisar(f"Automático: lendo o jogo em {largura}×{altura} ({captura.metodo})"
                             + (f" · partida: {atual}" if atual else ""))
 
+                self._gravar_eventos(detector)
                 if registro:
+                    detector.eventos.append((time.monotonic(), "PARTIDA REGISTRADA: "
+                                             f"{registro.heroi} em {registro.mapa} · {registro.resultado} · "
+                                             f"heróis {registro.herois} · usos {registro.habilidades}"))
+                    self._gravar_eventos(detector)
                     self.ao_registrar(registro)
                     self._salvar_aprendizado()
                 if any(v.startswith("Placar pós-fim") for v in vistos) and self.ao_corrigir_placar:
@@ -283,6 +290,25 @@ class Monitor(threading.Thread):
             # Placar em resolução cheia: os números pequenos precisam de detalhe.
             sufixo = "fim" if registro else "placar" if placar else ""
             self._salvar_print(bgra, largura, altura, sufixo, reducao=1 if placar else 2)
+
+    def _gravar_eventos(self, detector):
+        """Teclas e decisões do detector (contou, em recarga, chat, morto,
+        suprema pronta no HUD...) em dados/teclas.log, com a hora de cada uma."""
+        if not detector.eventos:
+            return
+        agora_m, agora = time.monotonic(), datetime.now()
+        linhas = []
+        while detector.eventos:
+            quando, texto = detector.eventos.popleft()
+            hora = agora - timedelta(seconds=agora_m - quando)
+            linhas.append(f"{hora:%Y-%m-%d %H:%M:%S.%f}"[:-3] + f" {texto}\n")
+        if not self.config["diagnostico"]:
+            return
+        PASTA_DADOS.mkdir(parents=True, exist_ok=True)
+        if LOG_TECLAS.exists() and LOG_TECLAS.stat().st_size > MAX_LOG_BYTES:
+            LOG_TECLAS.replace(LOG_TECLAS.with_suffix(".log.1"))
+        with open(LOG_TECLAS, "a", encoding="utf-8") as arq:
+            arq.writelines(linhas)
 
     def _registrar_log(self, linha):
         PASTA_DADOS.mkdir(parents=True, exist_ok=True)

@@ -18,7 +18,7 @@ O que observamos nas partidas reais (jogo em pt-BR, legendas ligadas):
 import difflib
 import re
 import unicodedata
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 
 from . import catalogo, dados
@@ -170,7 +170,8 @@ def mapa_do_cabecalho(linhas, altura):
         if linha.y > altura * 0.08:
             continue
         partes = RE_SEPARADOR.split(linha.texto.strip())
-        if len(partes) < 2 or not any(compactar(partes[0]).startswith(m) for m in INDICE_MODOS_MAPA):
+        # o ícone do modo antes do nome vira lixo no OCR ("9h HÍBRIDO"): basta conter o modo
+        if len(partes) < 2 or not any(m in compactar(partes[0]) for m in INDICE_MODOS_MAPA):
             continue
         nome = partes[-1].strip(" :|-")
         if len(compactar(nome)) >= 4:
@@ -244,7 +245,8 @@ class Partida:
     sinais_heroi: list = field(default_factory=list)          # (instante, nome, herói, texto, peso)
     heroi_no_tab: list = field(default_factory=list)          # (instante, heroi_id, peso) pela sua linha do Tab
     q_em: float = float("-inf")                                # último Q apertado
-    suprema_pronta_em: float = None                            # última leitura com a suprema pronta
+    suprema_pronta_desde: float = None                         # início do trecho com a suprema pronta
+    q_contado: float = None                                    # Q que já virou suprema contada
 
     def mapa_final(self):
         """O cabeçalho do Tab ("ESCOLTA | GRÍMSVÖTN") é a fonte mais confiável.
@@ -355,6 +357,7 @@ class Detector:
         self.biblioteca = None           # retratos.Biblioteca (o monitor entrega)
         self.contexto_fim = (None, {})   # herói e falas da partida que acabou
         self.times_pos_fim, self.times_pos_fim_em = None, float("-inf")
+        self.eventos = deque(maxlen=5000)  # (instante, texto) para o registro de teclas
         # Em quantas partidas cada nome falou: os colegas mudam, você não.
         self.partidas_por_falante = Counter(partidas_por_falante or {})
 
@@ -380,14 +383,22 @@ class Detector:
     # ------------------------------------------------------------ habilidades
 
     def teclas(self, apertos):
-        """Recebe os apertos de tecla [(tecla, instante)] (ver entradas.py) e
-        conta os usos de habilidade do seu herói atual. Um aperto só conta se:
-        você está numa partida, vivo, com o herói conhecido, a tecla é de uma
-        habilidade contável dele e ela já saiu da recarga desde o último uso.
-        O Q não conta aqui: a suprema é confirmada pelo % do HUD (_suprema)."""
+        """Recebe os apertos de tecla [(tecla, instante, chat_aberto)] (ver
+        entradas.py) e conta os usos de habilidade do seu herói atual. Um
+        aperto só conta se: você está numa partida, vivo, fora do chat, com o
+        herói conhecido, a tecla é de uma habilidade contável dele e ela já
+        saiu da recarga. O Q só marca o instante: a suprema é confirmada pelo
+        HUD (_suprema). Tudo vai para self.eventos (dados/teclas.log)."""
         p = self.partida
-        for tecla, quando in apertos:
-            if self.fora_de_partida or quando < self.ignorar_ate or quando < self.morto_ate:
+        for tecla, quando, chat in apertos:
+            if tecla in ("enter", "esc"):
+                self._evento(quando, f"{tecla} (chat {'aberto' if chat else 'fechado'})")
+                continue
+            motivo = ("chat aberto" if chat else "fora de partida" if self.fora_de_partida
+                      else "logo após o fim" if quando < self.ignorar_ate
+                      else "morto" if quando < self.morto_ate else "")
+            if motivo:
+                self._evento(quando, f"{tecla}: ignorada ({motivo})")
                 continue
             if p.candidato and quando - p.candidato["desde"] > DESISTIR_CANDIDATO:
                 p.candidato = None  # nunca confirmado: era leitura errada
@@ -395,26 +406,37 @@ class Detector:
                     self._soltar_apertos(p, p.heroi_atual)
             if tecla == "q":
                 p.q_em = quando
+                pronta = p.suprema_pronta_desde is not None
+                self._evento(quando, f"q (suprema {'pronta' if pronta else 'não pronta'} no HUD)")
             elif not p.heroi_atual or p.candidato:
                 p.apertos_pendentes.append((tecla, quando))  # contam quando o herói for confirmado
                 del p.apertos_pendentes[:-300]
+                self._evento(quando, f"{tecla}: aguardando confirmar o herói")
             else:
                 self._contar_aperto(p, p.heroi_atual, tecla, quando)
+
+    def _evento(self, quando, texto):
+        self.eventos.append((quando, texto))
 
     def _contar_aperto(self, p, heroi_id, tecla, quando):
         if tecla == "suprema":  # já confirmada pelo HUD (ver _suprema)
             suprema = next((h for h in rastreaveis(heroi_id) if h["tecla"] == "q"), None)
             if suprema:
                 p.usos[(heroi_id, suprema["id"])] += 1
+                self._evento(quando, f"SUPREMA contada: {suprema['nome']} ({heroi_id})")
             return
         habilidade = next((h for h in rastreaveis(heroi_id) if h["tecla"] == tecla), None)
         if not habilidade or not habilidade["recarga"]:
+            self._evento(quando, f"{tecla}: não é habilidade contável de {heroi_id}")
             return
         anterior = p.ultimo_uso.get((heroi_id, tecla))
         # Margem de 15%: vantagens e subfunções reduzem um pouco a recarga.
         if anterior is None or quando - anterior >= habilidade["recarga"] * 0.85:
             p.usos[(heroi_id, habilidade["id"])] += 1
             p.ultimo_uso[(heroi_id, tecla)] = quando
+            self._evento(quando, f"{tecla}: {habilidade['nome']} contada ({heroi_id})")
+        else:
+            self._evento(quando, f"{tecla}: em recarga ({quando - anterior:.1f} s de {habilidade['recarga']:g} s)")
 
     def _heroi_do_jogador(self, heroi_nome, texto, agora, peso=1):
         """Uma fala sua nas legendas. O herói atual (o dono das habilidades
@@ -435,6 +457,7 @@ class Detector:
         if fala_nova(p.candidato["falas"], agora, texto):
             p.candidato["peso"] += peso
         if p.candidato["peso"] >= CONFIRMA_HEROI:
+            self._evento(agora, f"herói confirmado pelas legendas: {h}")
             self._confirmar_heroi(h)
 
     def _confirmar_heroi(self, heroi_id):
@@ -463,19 +486,25 @@ class Detector:
         return None, 0
 
     def _suprema(self, tela, agora):
-        """Suprema usada: o HUD mostrava a suprema pronta, você apertou Q e
-        ela deixou de estar pronta (ver habilidades.suprema_pronta). Morrer
+        """Suprema usada: o HUD mostrava a suprema pronta, você apertou Q
+        enquanto ela estava pronta, e depois ela deixou de estar pronta. Algumas
+        supremas mantêm o círculo aceso enquanto duram (vários disparos), então
+        o Q vale em qualquer momento do trecho em que ela esteve pronta. Morrer
         com ela pronta não conta: sem Q, o HUD sumir é só a morte."""
         if tela is None:
             return
         p = self.partida
         pronta = suprema_pronta(tela.pixel, tela.largura, tela.altura)
-        if pronta:
-            p.suprema_pronta_em = agora
-        elif p.suprema_pronta_em is not None:
-            if p.q_em >= p.suprema_pronta_em - 1.5:
+        if pronta and p.suprema_pronta_desde is None:
+            p.suprema_pronta_desde = agora
+            self._evento(agora, "HUD: suprema pronta")
+        elif not pronta and p.suprema_pronta_desde is not None:
+            usou = p.q_em >= p.suprema_pronta_desde - 1.5 and p.q_em != p.q_contado
+            self._evento(agora, "HUD: suprema não está mais pronta" + (" (houve Q)" if usou else " (sem Q)"))
+            if usou:
+                p.q_contado = p.q_em
                 self._usou_suprema(p, p.q_em)
-            p.suprema_pronta_em = None
+            p.suprema_pronta_desde = None
 
     def _usou_suprema(self, p, quando):
         if not p.heroi_atual or p.candidato:
@@ -597,6 +626,7 @@ class Detector:
                 if heroi_id:
                     p.heroi_no_tab.append((agora, heroi_id, peso))
                     if peso >= CONFIRMA_HEROI and heroi_id != p.heroi_atual:
+                        self._evento(agora, f"herói confirmado pelo Tab: {heroi_id}")
                         self._confirmar_heroi(heroi_id)
                     mensagens.append(f"Seu herói no Tab: {heroi_id} (peso {peso})")
         return mensagens
