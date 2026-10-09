@@ -90,6 +90,10 @@ só com o Overwatch em primeiro plano:
   é o nome que fala em várias partidas (os colegas mudam, você não).
 - Falas de inimigos aparecem só como "[HAZARD]" e são ignoradas.
 - Telas com vários mapas ou modos (menu Jogar, votação de mapa) não contam.
+- O mapa vem do cabeçalho do Tab. Nome de mapa lido em outro lugar da tela só
+  vale se o Tab não foi aberto na partida, porque nomes de jogadores confundem
+  ("SAMOANP" virava Samoa). Uma partida só é dada como nova quando o Tab
+  mostra outro mapa (2 leituras), mais de 3 min depois do último Tab.
 - Se a tela pós-partida aparecer sem a legenda do resultado, o app preenche o
   Registro manual e só falta você clicar no resultado.
 - Para calibrar sem jogar: `python -m owtracker.reproduzir dados/diagnostico.log FILIPE`.

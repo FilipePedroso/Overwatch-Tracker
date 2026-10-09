@@ -28,7 +28,8 @@ from .retratos import FUNCAO_POR_POSICAO, identificar, reconhecer_vantagens
 
 TAMANHO_MIN_RESULTADO = 0.035  # altura mínima de VITÓRIA/DERROTA grande, em fração da tela
 ESPERA_POS_RESULTADO = 60      # s ignorando resultados depois de registrar
-MAPA_ANTIGO = 180              # s sem ver o mapa: outro mapa = nova partida
+MAPA_ANTIGO = 180              # s sem ver o mapa no Tab: outro mapa no Tab = nova partida
+OUTRO_MAPA_TAB = 2             # leituras do Tab com outro mapa para dar a partida como nova
 MESMO_TAB = 15                 # s: leituras do placar tão próximas são o mesmo Tab aberto
 PARTIDA_PARADA = 900           # s sem novidade: a partida em andamento é descartada
 LEITURAS_MAPA_NOVO = 3         # leituras do Tab para aceitar um mapa fora do catálogo
@@ -224,7 +225,8 @@ class Partida:
     mapas: Counter = field(default_factory=Counter)
     modos: Counter = field(default_factory=Counter)
     falas: defaultdict = field(default_factory=lambda: defaultdict(Counter))  # nome -> heróis
-    mapa_visto_em: dict = field(default_factory=dict)
+    mapa_visto_em: dict = field(default_factory=dict)          # mapa -> última vez no Tab
+    outro_mapa_tab: Counter = field(default_factory=Counter)    # outro mapa visto no Tab (nova partida?)
     placar: "LeiturasPlacar" = field(default_factory=lambda: LeiturasPlacar())
     times: dict = None                  # última leitura dos dois times no Tab
     times_em: float = float("-inf")
@@ -572,7 +574,9 @@ class Detector:
         if nome:
             conhecido = achar_contido(compactar(nome), INDICE_MAPAS)
             if conhecido:
+                p = self._outro_mapa_no_tab(conhecido, agora)
                 p.mapas_tab[conhecido] += 1
+                p.mapa_visto_em[conhecido] = agora
             elif not parece_mapa_conhecido(nome):  # "wos" é ILIOS mal lido, não mapa novo
                 p.mapas_desconhecidos[nome.title()] += 1
                 mensagens.append(f"Mapa fora do catálogo no Tab: {nome}")
@@ -673,13 +677,27 @@ class Detector:
             mensagens.append(f"Modo: {modo}")
         return mensagens
 
-    def _votar_mapa(self, mapa, agora):
+    def _outro_mapa_no_tab(self, mapa, agora):
+        """O Tab mostra outro mapa bem depois do último Tab: é outra partida
+        (a anterior acabou sem o resultado ser visto). Precisa de mais de uma
+        leitura, para um cabeçalho mal lido não jogar a partida fora."""
         p = self.partida
-        lider = p.mais_votado(p.mapas) if p.mapas else None
-        if lider and mapa != lider and agora - p.mapa_visto_em.get(lider, agora) > MAPA_ANTIGO:
-            self.partida = p = Partida()  # outro mapa muito depois: é outra partida
-        p.mapas[mapa] += 1
-        p.mapa_visto_em[mapa] = agora
+        lider = p.mais_votado(p.mapas_tab) if p.mapas_tab else None
+        if not lider or mapa == lider:
+            p.outro_mapa_tab.clear()
+            return p
+        p.outro_mapa_tab[mapa] += 1
+        if p.outro_mapa_tab[mapa] >= OUTRO_MAPA_TAB and agora - p.mapa_visto_em.get(lider, agora) > MAPA_ANTIGO:
+            self.partida = Partida()
+            for _ in range(p.outro_mapa_tab[mapa] - 1):
+                self.partida.mapas_tab[mapa] += 1
+        return self.partida
+
+    def _votar_mapa(self, mapa, agora):
+        # Mapa lido fora do Tab: só reserva, para partidas em que o Tab não foi
+        # aberto (ver mapa_final). Nomes de jogadores e falas confundem
+        # ("SAMOANP" -> Samoa), então isto nunca troca de partida.
+        self.partida.mapas[mapa] += 1
 
     # ------------------------------------------------------------ fim
 
