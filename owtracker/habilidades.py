@@ -17,6 +17,7 @@ Revisão feita sobre os dados da wiki (ver ferramentas/revisar_habilidades.py):
   6 seconds (...)": vale o primeiro número (a recarga base).
 """
 
+import math
 import re
 from functools import lru_cache
 
@@ -46,6 +47,42 @@ def recarga_em_segundos(texto):
     """'5 seconds;;destroyed' -> 5.0; '8 seconds (base); 6 seconds' -> 8.0; None -> None."""
     m = re.search(r"(\d+(?:\.\d+)?)\s*seconds?", texto or "")
     return float(m.group(1)) if m else None
+
+
+# Suprema pronta no HUD: o círculo do centro, embaixo, vira um anel branco
+# grosso com o ícone dentro e um brilho amarelo-esverdeado em volta. Enquanto
+# carrega, ali só há o número e o medidor tracejado. (Medido em 1920x1080;
+# o HUD acompanha a altura da tela e fica centralizado.)
+CENTRO_SUPREMA = (0.501, 0.860)       # x em fração da largura, y da altura
+ANEL_BRANCO = (0.027, 0.034)          # raios em fração da altura
+ANEL_BRILHO = (0.039, 0.046)
+
+
+def suprema_pronta(pixel, largura, altura):
+    """pixel(x, y) -> (r, g, b). True se o HUD mostra a suprema pronta."""
+    cx, cy = CENTRO_SUPREMA[0] * largura, CENTRO_SUPREMA[1] * altura
+
+    def fracao(raios, teste, n=48):
+        sim = total = 0
+        for i in range(n):
+            angulo = 2 * math.pi * i / n
+            for r in (raios[0], (raios[0] + raios[1]) / 2, raios[1]):
+                x = int(cx + r * altura * math.cos(angulo))
+                y = int(cy + r * altura * math.sin(angulo))
+                if 0 <= x < largura and 0 <= y < altura:
+                    total += 1
+                    sim += teste(*pixel(x, y))
+        return sim / total if total else 0
+
+    def branco(r, g, b):
+        return min(r, g, b) > 200
+
+    def brilho(r, g, b):
+        return g > 190 and b < 140 and r > 120
+
+    # anel branco, sem branco logo fora (fundo claro) e com o brilho em volta
+    return (fracao(ANEL_BRANCO, branco) >= 0.7 and fracao(ANEL_BRILHO, branco) <= 0.15
+            and fracao(ANEL_BRILHO, brilho) >= 0.4)
 
 
 @lru_cache(maxsize=None)

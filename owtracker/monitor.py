@@ -95,6 +95,11 @@ class Tela:
                        for t in self.ocr.ler(grande, lg, ag)]
         return linhas
 
+    def pixel(self, x, y):
+        i = (y * self.largura + x) * 4
+        b, g, r = self.bgra[i], self.bgra[i + 1], self.bgra[i + 2]
+        return r, g, b
+
     def rgb(self, x, y, l, a):
         """Recorte RGB (para os retratos dos heróis no placar)."""
         x, y, l, a = self._dentro(x, y, l, a)

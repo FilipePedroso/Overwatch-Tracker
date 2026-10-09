@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 
 from . import catalogo, dados
 from .placar import ler_placar, ler_times, tela_do_placar
-from .habilidades import rastreaveis
+from .habilidades import rastreaveis, suprema_pronta
 from .retratos import FUNCAO_POR_POSICAO, identificar, reconhecer_vantagens
 
 TAMANHO_MIN_RESULTADO = 0.035  # altura mínima de VITÓRIA/DERROTA grande, em fração da tela
@@ -242,7 +242,7 @@ class Partida:
     sinais_heroi: list = field(default_factory=list)          # (instante, nome, herói, texto, peso)
     heroi_no_tab: list = field(default_factory=list)          # (instante, heroi_id, peso) pela sua linha do Tab
     q_em: float = float("-inf")                                # último Q apertado
-    suprema_pct: int = None                                    # último % da suprema lido no HUD
+    suprema_pronta_em: float = None                            # última leitura com a suprema pronta
 
     def mapa_final(self):
         """O cabeçalho do Tab ("ESCOLTA | GRÍMSVÖTN") é a fonte mais confiável.
@@ -400,6 +400,11 @@ class Detector:
                 self._contar_aperto(p, p.heroi_atual, tecla, quando)
 
     def _contar_aperto(self, p, heroi_id, tecla, quando):
+        if tecla == "suprema":  # já confirmada pelo HUD (ver _suprema)
+            suprema = next((h for h in rastreaveis(heroi_id) if h["tecla"] == "q"), None)
+            if suprema:
+                p.usos[(heroi_id, suprema["id"])] += 1
+            return
         habilidade = next((h for h in rastreaveis(heroi_id) if h["tecla"] == tecla), None)
         if not habilidade or not habilidade["recarga"]:
             return
@@ -455,27 +460,26 @@ class Detector:
             return heroi_id, 1
         return None, 0
 
-    def _suprema(self, linhas, largura, altura, agora):
-        """% da suprema no HUD (centro, embaixo). Ela foi usada quando o % estava
-        quase cheio, caiu bem, e você tinha apertado Q pouco antes (sem o Q,
-        a queda é troca de herói, não uso)."""
-        p = self.partida
-        for linha in linhas:
-            texto = linha.texto.strip().rstrip("%")
-            centro_x = linha.x + linha.largura / 2
-            if not (texto.isdigit() and len(texto) <= 3 and abs(centro_x / largura - 0.495) < 0.03
-                    and abs(linha.y / altura - 0.844) < 0.02):
-                continue
-            pct = int(texto)
-            if pct > 100:
-                return
-            if p.suprema_pct is not None and p.suprema_pct >= 85 and pct <= 30 \
-                    and agora - p.q_em <= 10 and p.heroi_atual:
-                suprema = next((h for h in rastreaveis(p.heroi_atual) if h["tecla"] == "q"), None)
-                if suprema:
-                    p.usos[(p.heroi_atual, suprema["id"])] += 1
-            p.suprema_pct = pct
+    def _suprema(self, tela, agora):
+        """Suprema usada: o HUD mostrava a suprema pronta, você apertou Q e
+        ela deixou de estar pronta (ver habilidades.suprema_pronta). Morrer
+        com ela pronta não conta: sem Q, o HUD sumir é só a morte."""
+        if tela is None:
             return
+        p = self.partida
+        pronta = suprema_pronta(tela.pixel, tela.largura, tela.altura)
+        if pronta:
+            p.suprema_pronta_em = agora
+        elif p.suprema_pronta_em is not None:
+            if p.q_em >= p.suprema_pronta_em - 1.5:
+                self._usou_suprema(p, p.q_em)
+            p.suprema_pronta_em = None
+
+    def _usou_suprema(self, p, quando):
+        if not p.heroi_atual or p.candidato:
+            p.apertos_pendentes.append(("suprema", quando))  # conta com o herói confirmado
+        else:
+            self._contar_aperto(p, p.heroi_atual, "suprema", quando)
 
     @staticmethod
     def _usos_da_partida(p):
@@ -541,7 +545,7 @@ class Detector:
                     self._heroi_do_jogador(heroi, linha.texto, agora, peso)
                 mensagens.append(f"Fala: {nome} ({heroi})")
 
-        self._suprema(linhas, largura, altura, agora)
+        self._suprema(tela, agora)
         if tela_inteira:
             # "RESSURGIRÁ EM" no canto superior direito: você está morto.
             if any(l.x > largura * 0.7 and l.y < altura * 0.08 and morto(l.texto) for l in linhas):

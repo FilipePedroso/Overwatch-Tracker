@@ -123,8 +123,10 @@ página do herói ("Uso de habilidades": média por partida, total, máximo e as
   porque vantagens e subfunções reduzem um pouco a recarga). Assim, apertar
   várias vezes seguidas conta um uso só.
 - Não conta com o chat aberto (Enter… Enter/Esc) nem morto ("RESSURGIRÁ EM").
-- A suprema conta quando o % do HUD estava quase cheio e caiu, com um Q
-  apertado pouco antes. Sem o Q, a queda é troca de herói.
+- A suprema conta pelos pixels do HUD: o círculo do centro mostra a suprema
+  pronta (anel branco com brilho amarelo-esverdeado); você aperta Q e ela deixa
+  de estar pronta. Sem o Q (morreu com ela pronta, abriu o Tab) não conta. O %
+  não é usado: a fonte do jogo é difícil para o OCR, e em 100% não há número.
 - O que conta como habilidade fica em `habilidades.py`. Ficam de fora: tiros
   (o botão direito da Lifeweaver, por exemplo), habilidades sem recarga ou com
   recarga muito curta, e barreiras de segurar (Reinhardt, Brigitte...).
