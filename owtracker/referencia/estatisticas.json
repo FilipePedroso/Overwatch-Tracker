@@ -1,0 +1,165 @@
+{
+ "roadhog": [
+  {
+   "chave": "tempo-disputando-o-objetivo",
+   "rotulo": "TEMPO DISPUTANDO O OBJETIVO",
+   "tipo": "tempo"
+  },
+  {
+   "chave": "jogador-protegido",
+   "rotulo": "JOGADORES PROTEGIDOS",
+   "tipo": "num"
+  },
+  {
+   "chave": "precisao-da-arma",
+   "rotulo": "PRECISÃO DA ARMA",
+   "tipo": "pct"
+  },
+  {
+   "chave": "abate-com-a-corrente-de-gancho",
+   "rotulo": "ABATES COM A CORRENTE DE GANCHO",
+   "tipo": "num"
+  },
+  {
+   "chave": "precisao-com-a-corrente-de-gancho",
+   "rotulo": "PRECISÃO COM A CORRENTE DE GANCHO",
+   "tipo": "pct"
+  },
+  {
+   "chave": "auto-cura",
+   "rotulo": "AUTO-CURA",
+   "tipo": "num"
+  },
+  {
+   "chave": "suprema-neutralizada",
+   "rotulo": "SUPREMAS NEUTRALIZADAS",
+   "tipo": "num"
+  },
+  {
+   "chave": "abate-por-cair-matando",
+   "rotulo": "ABATES POR CAIR MATANDO",
+   "tipo": "num"
+  }
+ ],
+ "domina": [
+  {
+   "chave": "tempo-disputando-o-objetivo",
+   "rotulo": "TEMPO DISPUTANDO O OBJETIVO",
+   "tipo": "tempo"
+  },
+  {
+   "chave": "jogador-protegido",
+   "rotulo": "JOGADORES PROTEGIDOS",
+   "tipo": "num"
+  },
+  {
+   "chave": "precisao-do-feixe-da-arma",
+   "rotulo": "PRECISÃO DO FEIXE DA ARMA",
+   "tipo": "pct"
+  },
+  {
+   "chave": "precisao-do-tiro-com-a-arma",
+   "rotulo": "PRECISÃO DO TIRO COM A ARMA",
+   "tipo": "pct"
+  },
+  {
+   "chave": "abate-por-repulsao",
+   "rotulo": "ABATES POR REPULSÃO",
+   "tipo": "num"
+  },
+  {
+   "chave": "abate-no-ambiente",
+   "rotulo": "ABATES NO AMBIENTE",
+   "tipo": "num"
+  },
+  {
+   "chave": "dano-de-carga-cristalina",
+   "rotulo": "DANO DE CARGA CRISTALINA",
+   "tipo": "num"
+  },
+  {
+   "chave": "auto-cura",
+   "rotulo": "AUTO-CURA",
+   "tipo": "num"
+  },
+  {
+   "chave": "acerto-do-panoptico",
+   "rotulo": "ACERTOS DO PANÓPTICO",
+   "tipo": "num"
+  }
+ ],
+ "doctrine": [
+  {
+   "chave": "precisao-da-arma",
+   "rotulo": "PRECISÃO DA ARMA",
+   "tipo": "pct"
+  },
+  {
+   "chave": "jogador-salvo",
+   "rotulo": "JOGADORES SALVOS",
+   "tipo": "num"
+  },
+  {
+   "chave": "dano-com-infusao-de-cetro",
+   "rotulo": "DANO COM INFUSÃO DE CETRO",
+   "tipo": "num"
+  },
+  {
+   "chave": "cura-com-infusao-de-cetro",
+   "rotulo": "CURA COM INFUSÃO DE CETRO",
+   "tipo": "num"
+  },
+  {
+   "chave": "vida-limitada-por-libertacao",
+   "rotulo": "VIDA LIMITADA POR LIBERTAÇÃO",
+   "tipo": "num"
+  },
+  {
+   "chave": "vida-extra-concedida-por-libertacao",
+   "rotulo": "VIDA EXTRA CONCEDIDA POR LIBERTAÇÃO",
+   "tipo": "num"
+  }
+ ],
+ "sombra": [
+  {
+   "chave": "jogador-salvo",
+   "rotulo": "JOGADORES SALVOS",
+   "tipo": "num"
+  },
+  {
+   "chave": "precisao-da-arma",
+   "rotulo": "PRECISÃO DA ARMA",
+   "tipo": "pct"
+  },
+  {
+   "chave": "precisao-de-golpe-critico",
+   "rotulo": "PRECISÃO DE GOLPES CRÍTICOS",
+   "tipo": "pct"
+  },
+  {
+   "chave": "cura-com-ajuste",
+   "rotulo": "CURA COM AJUSTE",
+   "tipo": "num"
+  },
+  {
+   "chave": "cura-com-ciberespaco",
+   "rotulo": "CURA COM CIBERESPAÇO",
+   "tipo": "num"
+  },
+  {
+   "chave": "dano-com-ciberespaco",
+   "rotulo": "DANO COM CIBERESPAÇO",
+   "tipo": "num"
+  },
+  {
+   "chave": "kit-medico-hackeado",
+   "rotulo": "KITS MÉDICOS HACKEADOS",
+   "tipo": "num"
+  },
+  {
+   "chave": "abate-com-o-pem",
+   "rotulo": "ABATES COM O PEM",
+   "tipo": "num"
+  }
+ ]
+}

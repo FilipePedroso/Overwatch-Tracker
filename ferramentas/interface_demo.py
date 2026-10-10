@@ -48,7 +48,27 @@ def partida_de_teste(s, print_do_tab):
     registro, _ = detector.processar([Linha("[ATHENA] Vitória.", 800, 1030, 300, 18)], largura, altura, 600, False)
     s._ao_registrar(registro)
     print("partida de teste:", registro.heroi, registro.mapa, registro.resultado,
-          "| times:", "sim" if registro.times else "não")
+          "| times:", "sim" if registro.times else "não",
+          "| estatísticas do painel:", len(registro.estatisticas))
+    estatisticas_de_exemplo(s, registro)
+
+
+def estatisticas_de_exemplo(s, registro):
+    """Só na cópia: espalha versões variadas das estatísticas lidas pelas
+    partidas antigas do mesmo herói, para as médias e comparações terem o que mostrar."""
+    import random
+    random.seed(7)
+    for heroi_id in {e["heroi_id"] for e in registro.estatisticas}:
+        antigas = [r["id"] for r in s.banco.con.execute(
+            "SELECT id FROM partidas WHERE heroi_id = ? AND id <> ? ORDER BY id DESC LIMIT 6",
+            (heroi_id, s.ultimo_auto_id))]
+        for id_partida in antigas:
+            fator = random.uniform(0.5, 1.3)
+            s.banco.salvar_estatisticas(id_partida, [
+                {**e, "valor": round(e["valor"] * (random.uniform(0.8, 1.2) if e["tipo"] == "pct" else fator))}
+                for e in registro.estatisticas if e["heroi_id"] == heroi_id])
+            if not s.banco.con.execute("SELECT 1 FROM herois_partida WHERE partida_id = ?", (id_partida,)).fetchone():
+                s.banco.salvar_herois(id_partida, [{"heroi_id": heroi_id, "segundos": round(600 * fator)}])
 
 
 def main():

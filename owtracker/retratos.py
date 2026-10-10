@@ -271,12 +271,14 @@ def identificar(times, heroi_jogador, biblioteca, falas=None, nome_jogador=""):
 
     falas: {NOME: Counter(herói)} das legendas da partida: "[STRIKING (DOCTRINE)]"
     dá o nome e o herói certos de aliados que falaram."""
-    from .detector import compactar, similaridade
+    from .detector import compactar, mesmo_nome, similaridade
 
     seu = catalogo.heroi(heroi_jogador) if heroi_jogador else None
     falantes = {}
     for nome, herois in (falas or {}).items():
         heroi = catalogo.heroi(herois.most_common(1)[0][0]) if herois else None
+        if nome_jogador and mesmo_nome(nome, nome_jogador):
+            continue  # as suas falas são da sua linha, não de um aliado de nome parecido
         if heroi:
             falantes[nome] = heroi["id"]
     for time in ("aliados", "inimigos"):

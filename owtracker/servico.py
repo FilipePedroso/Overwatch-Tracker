@@ -33,6 +33,7 @@ class Servico:
         self.monitor = Monitor(
             avisar=self._ao_status, ao_registrar=self._ao_registrar,
             ao_atualizar=self._ao_parcial, ao_corrigir_placar=self._ao_placar_final)
+        self._estatisticas_conhecidas()
 
     def iniciar(self):
         self.monitor.start()
@@ -68,12 +69,15 @@ class Servico:
             self.versao += 1
             self._noticia(f"Registrada: {r.resultado} · {r.heroi} · {r.mapa}")
 
-    def _ao_placar_final(self, placar, times=None):
+    def _ao_placar_final(self, placar, times=None, estatisticas=None):
         with self.trava:
             if self.ultimo_auto_id:
                 self.banco.atualizar_placar(self.ultimo_auto_id, placar)
                 if times:  # Tab depois do fim: os números finais de todo mundo
                     self.banco.salvar_jogadores(self.ultimo_auto_id, times)
+                if estatisticas:  # idem para o painel do herói
+                    self.banco.salvar_estatisticas(self.ultimo_auto_id, estatisticas)
+                    self._estatisticas_conhecidas()
                 self.versao += 1
                 self._noticia("Placar final atualizado pelo Tab depois do fim da partida.")
 
@@ -95,11 +99,21 @@ class Servico:
             com_times = self.banco.partidas_com_jogadores()
             com_habilidades = self.banco.partidas_com_habilidades()
             herois = self.banco.herois_das_partidas()
+            com_estatisticas = self.banco.partidas_com_estatisticas()
         for p in partidas:
+            p["tem_estatisticas"] = p["id"] in com_estatisticas
             p["herois"] = herois.get(p["id"], [])
             p["tem_times"] = p["id"] in com_times
             p["tem_habilidades"] = p["id"] in com_habilidades
         return partidas
+
+    def estatisticas_da_partida(self, id_partida):
+        with self.trava:
+            return self.banco.estatisticas_da_partida(id_partida)
+
+    def estatisticas_do_heroi(self, heroi_id):
+        with self.trava:
+            return self.banco.estatisticas_do_heroi(heroi_id)
 
     def habilidades_da_partida(self, id_partida):
         with self.trava:
@@ -184,6 +198,17 @@ class Servico:
             self.banco.salvar_habilidades(id_partida, r.habilidades)
         if r.herois:
             self.banco.salvar_herois(id_partida, r.herois)
+        if r.estatisticas:
+            self.banco.salvar_estatisticas(id_partida, r.estatisticas)
+            self._estatisticas_conhecidas()
+
+    def _estatisticas_conhecidas(self):
+        """Entrega ao detector o que o banco já conhece do painel de cada herói
+        (chave -> tipo): ele confere o tipo e aceita na primeira leitura."""
+        conhecidas = self.monitor.detector.estatisticas_conhecidas
+        conhecidas.clear()
+        for heroi_id, lista in self.banco.definicoes_estatisticas().items():
+            conhecidas[heroi_id] = {e["chave"]: e["tipo"] for e in lista}
 
     def descartar_andamento(self):
         self.monitor.descartar_partida()

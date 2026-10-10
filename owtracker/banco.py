@@ -49,6 +49,24 @@ CREATE TABLE IF NOT EXISTS habilidades_partida (
     usos          INTEGER NOT NULL,
     PRIMARY KEY (partida_id, heroi_id, habilidade_id)
 );
+-- Estatísticas específicas de cada herói (painel do Tab, ver painel.py).
+-- As definições vêm de referencia/estatisticas.json e crescem com o que o
+-- app lê no jogo; por isso não ficam nas tabelas do catálogo (recriadas).
+CREATE TABLE IF NOT EXISTS estatistica_heroi (
+    heroi_id TEXT    NOT NULL,
+    chave    TEXT    NOT NULL,
+    rotulo   TEXT    NOT NULL,
+    tipo     TEXT    NOT NULL,   -- num, pct ou tempo (segundos)
+    ordem    INTEGER NOT NULL,
+    PRIMARY KEY (heroi_id, chave)
+);
+CREATE TABLE IF NOT EXISTS estatisticas_partida (
+    partida_id INTEGER NOT NULL REFERENCES partidas(id) ON DELETE CASCADE,
+    heroi_id   TEXT    NOT NULL,
+    chave      TEXT    NOT NULL,
+    valor      REAL    NOT NULL,
+    PRIMARY KEY (partida_id, heroi_id, chave)
+);
 -- Seus heróis na partida, na ordem em que foram jogados (trocas).
 CREATE TABLE IF NOT EXISTS herois_partida (
     partida_id INTEGER NOT NULL REFERENCES partidas(id) ON DELETE CASCADE,
@@ -80,6 +98,7 @@ class Banco:
         self._migrar()
         catalogo.instalar(self.con)
         self._ligar_referencia()
+        self._semear_estatisticas()
 
     def _migrar(self):
         existentes = {linha["name"] for linha in self.con.execute("PRAGMA table_info(partidas)")}
@@ -235,6 +254,79 @@ class Banco:
             "WHERE h.heroi_id = ? ORDER BY p.data_hora", (heroi_id,))]
         return {"partidas": partidas, "habilidades": linhas, "por_partida": por_partida}
 
+    # ------------------------------------------------------------ estatísticas do herói
+
+    def _semear_estatisticas(self):
+        """Definições já mapeadas (referencia/estatisticas.json); as que o app
+        aprendeu no jogo continuam."""
+        arquivo = catalogo.PASTA / "estatisticas.json"
+        if not arquivo.exists():
+            return
+        with self.con:
+            for heroi_id, lista in json.loads(arquivo.read_text("utf-8")).items():
+                self.con.executemany(
+                    "INSERT OR IGNORE INTO estatistica_heroi VALUES (?, ?, ?, ?, ?)",
+                    [(heroi_id, e["chave"], e["rotulo"], e["tipo"], i + 1) for i, e in enumerate(lista)])
+
+    def definicoes_estatisticas(self, heroi_id=None):
+        """{heroi_id: [{chave, rotulo, tipo, ordem}]} na ordem do painel."""
+        saida = {}
+        for r in self.con.execute(
+                "SELECT * FROM estatistica_heroi WHERE ? IS NULL OR heroi_id = ? ORDER BY heroi_id, ordem, rotulo",
+                (heroi_id, heroi_id)):
+            saida.setdefault(r["heroi_id"], []).append(
+                {"chave": r["chave"], "rotulo": r["rotulo"], "tipo": r["tipo"], "ordem": r["ordem"]})
+        return saida
+
+    def salvar_estatisticas(self, id_partida, estatisticas):
+        """Grava (ou atualiza) as estatísticas lidas no painel e aprende as
+        definições novas. estatisticas: [{heroi_id, chave, rotulo, valor, tipo, ordem}]."""
+        with self.con:
+            for e in estatisticas:
+                atual = self.con.execute(
+                    "SELECT rotulo, tipo FROM estatistica_heroi WHERE heroi_id = ? AND chave = ?",
+                    (e["heroi_id"], e["chave"])).fetchone()
+                if atual is None:
+                    ordem = e["ordem"] or 1 + self.con.execute(
+                        "SELECT COALESCE(MAX(ordem), 0) FROM estatistica_heroi WHERE heroi_id = ?",
+                        (e["heroi_id"],)).fetchone()[0]
+                    self.con.execute("INSERT INTO estatistica_heroi VALUES (?, ?, ?, ?, ?)",
+                                     (e["heroi_id"], e["chave"], e["rotulo"], e["tipo"], ordem))
+                elif atual["tipo"] != e["tipo"]:
+                    continue
+                elif len(e["rotulo"]) > len(atual["rotulo"]):  # plural no lugar do singular
+                    self.con.execute("UPDATE estatistica_heroi SET rotulo = ? WHERE heroi_id = ? AND chave = ?",
+                                     (e["rotulo"], e["heroi_id"], e["chave"]))
+                self.con.execute("INSERT OR REPLACE INTO estatisticas_partida VALUES (?, ?, ?, ?)",
+                                 (id_partida, e["heroi_id"], e["chave"], e["valor"]))
+
+    def estatisticas_da_partida(self, id_partida):
+        return [dict(r) for r in self.con.execute(
+            "SELECT v.heroi_id, v.chave, d.rotulo, d.tipo, d.ordem, v.valor "
+            "FROM estatisticas_partida v JOIN estatistica_heroi d ON d.heroi_id = v.heroi_id AND d.chave = v.chave "
+            "WHERE v.partida_id = ? ORDER BY v.heroi_id, d.ordem, d.rotulo", (id_partida,))]
+
+    def estatisticas_do_heroi(self, heroi_id):
+        """Definições do herói e, por partida, os valores e o tempo jogado com
+        ele (para as médias por 10 min): {definicoes, partidas: [{partida_id,
+        data_hora, resultado, segundos, valores: {chave: valor}}]}."""
+        partidas = {}
+        for r in self.con.execute(
+                "SELECT v.partida_id, p.data_hora, p.resultado, v.chave, v.valor, "
+                "  (SELECT SUM(segundos) FROM herois_partida h "
+                "    WHERE h.partida_id = v.partida_id AND h.heroi_id = v.heroi_id) AS segundos "
+                "FROM estatisticas_partida v JOIN partidas p ON p.id = v.partida_id "
+                "WHERE v.heroi_id = ? ORDER BY p.data_hora", (heroi_id,)):
+            partida = partidas.setdefault(r["partida_id"], {
+                "partida_id": r["partida_id"], "data_hora": r["data_hora"], "resultado": r["resultado"],
+                "segundos": r["segundos"], "valores": {}})
+            partida["valores"][r["chave"]] = r["valor"]
+        return {"definicoes": self.definicoes_estatisticas(heroi_id).get(heroi_id, []),
+                "partidas": list(partidas.values())}
+
+    def partidas_com_estatisticas(self):
+        return {r[0] for r in self.con.execute("SELECT DISTINCT partida_id FROM estatisticas_partida")}
+
     def salvar_herois(self, id_partida, herois):
         with self.con:
             self.con.execute("DELETE FROM herois_partida WHERE partida_id = ?", (id_partida,))
@@ -264,6 +356,7 @@ class Banco:
             self.con.execute("DELETE FROM jogadores WHERE partida_id = ?", (id_partida,))
             self.con.execute("DELETE FROM habilidades_partida WHERE partida_id = ?", (id_partida,))
             self.con.execute("DELETE FROM herois_partida WHERE partida_id = ?", (id_partida,))
+            self.con.execute("DELETE FROM estatisticas_partida WHERE partida_id = ?", (id_partida,))
             self.con.execute("DELETE FROM partidas WHERE id = ?", (id_partida,))
 
     def listar_completo(self):

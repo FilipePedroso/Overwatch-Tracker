@@ -28,6 +28,8 @@ const app = {
   jogadores: {},  // times de cada partida, carregados sob demanda
   habilidadesPartida: {},  // uso de habilidades por partida (sob demanda)
   habilidadesHeroi: {},    // uso de habilidades por herói (sob demanda)
+  estatisticasPartida: {}, // painel do herói no Tab, por partida (sob demanda)
+  estatisticasHeroi: {},   // idem, todas as partidas de um herói (sob demanda)
   filtros: carregarFiltros(),
   ref: {},  // índices do catálogo
 };
@@ -422,6 +424,7 @@ function paginaHeroi(id) {
   </section>
   <div class="grade">
     <div class="coluna">
+      ${blocoEstatisticasHeroi(h)}
       ${blocoHabilidadesHeroi(h)}
       <section class="painel"><header><h2>Habilidades</h2></header><div class="habilidades">${habs.map(habilidadeHtml).join("")}</div></section>
       ${vantagens.length ? `<section class="painel"><header><h2>Vantagens</h2><small>escolhidas durante a partida</small></header><div class="habilidades">${vantagens.map(habilidadeHtml).join("")}</div></section>` : ""}
@@ -521,6 +524,98 @@ function cartaoHabilidade(a, numero, rotulo, extra = "") {
   </div>`;
 }
 
+// ------------------------------------------------------------------ estatísticas do herói (painel do Tab)
+
+const decimal = (n, casas = 1) => n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
+function valorEstat(valor, tipo) {
+  if (valor === null || valor === undefined) return "—";
+  if (tipo === "pct") return `${decimal(valor, 0)}%`;
+  if (tipo === "tempo") return duracao(Math.round(valor));
+  return valor >= 100 ? fmt(valor) : decimal(valor);
+}
+const rotuloEstat = (r) => r;  // como no jogo, em maiúsculas (siglas como PEM ficam certas)
+// Contagens crescem com o tempo de jogo: para comparar partidas, por 10 min.
+const por10min = (valor, segundos) => (segundos >= 120 ? (valor * 600) / segundos : null);
+const mediaDe = (l) => (l.length ? l.reduce((a, b) => a + b, 0) / l.length : null);
+
+function resumoEstat(def, partidas) {
+  // Tudo o que a página do herói mostra de uma estatística.
+  const com = partidas.filter((m) => m.valores[def.chave] !== undefined);
+  const valores = com.map((m) => m.valores[def.chave]);
+  const taxas = def.tipo === "num" ? com.map((m) => por10min(m.valores[def.chave], m.segundos)).filter((v) => v !== null) : [];
+  const usarTaxa = def.tipo === "num" && taxas.length === com.length && com.length > 0;
+  const medida = (m) => (usarTaxa ? por10min(m.valores[def.chave], m.segundos) : m.valores[def.chave]);
+  return {
+    com, usarTaxa, medida,
+    media: mediaDe(com.map(medida)), mediaPartida: mediaDe(valores), melhor: valores.length ? Math.max(...valores) : null,
+    vitorias: mediaDe(com.filter((m) => m.resultado === "Vitória").map(medida)),
+    derrotas: mediaDe(com.filter((m) => m.resultado === "Derrota").map(medida)),
+  };
+}
+
+function blocoEstatisticasPartida(p) {
+  if (!p.tem_estatisticas) return "";
+  const lista = carregarSobDemanda("estatisticasPartida", p.id, `/api/partidas/${p.id}/estatisticas`);
+  if (!lista) return `<section class="painel"><div class="vazio">Carregando as estatísticas do herói…</div></section>`;
+  const porHeroi = agrupar(lista, "heroi_id");
+  const ordem = [...new Set([...(p.herois || []).map((x) => x.heroi_id), ...porHeroi.keys()])].filter((id) => porHeroi.has(id));
+  return `<section class="painel"><header><h2>Estatísticas do herói</h2><small>do painel do Tab · comparadas com a sua média nas outras partidas</small></header>
+    ${ordem.map((heroiId) => {
+      const h = app.ref.heroi[heroiId], estat = porHeroi.get(heroiId);
+      const geral = carregarSobDemanda("estatisticasHeroi", heroiId, `/api/herois/${heroiId}/estatisticas`);
+      const outras = geral ? geral.partidas.filter((m) => m.partida_id !== p.id) : [];
+      const segundos = (p.herois || []).filter((x) => x.heroi_id === heroiId).reduce((a, x) => a + x.segundos, 0);
+      return `<div class="usos-heroi">${ordem.length > 1 && h ? `<div class="usos-titulo"><img src="${h.retrato}" alt="">${esc(h.nome)}</div>` : ""}
+        <div class="estats">${estat.map((e) => {
+          const r = resumoEstat(e, outras);
+          const meu = r.usarTaxa ? por10min(e.valor, segundos) : e.valor;
+          let comparacao = "";
+          if (r.com.length >= 2 && r.media !== null && meu !== null && (r.media > 0 || meu > 0)) {
+            const dif = e.tipo === "pct" ? meu - r.media : r.media > 0 ? (100 * (meu - r.media)) / r.media : 100;
+            const texto = e.tipo === "pct" ? `${decimal(Math.abs(dif), 0)} p.p.` : `${decimal(Math.abs(dif), 0)}%`;
+            comparacao = Math.abs(dif) < 3 ? `<small class="igual">na média</small>`
+              : `<small class="${dif > 0 ? "acima" : "abaixo"}" title="sua média: ${valorEstat(r.media, e.tipo)}${r.usarTaxa ? " por 10 min" : ""}">${dif > 0 ? "▲" : "▼"} ${texto}</small>`;
+          }
+          return `<div class="estat"><div class="numero">${valorEstat(e.valor, e.tipo)}</div>
+            <div class="estat-rotulo">${esc(rotuloEstat(e.rotulo))}</div>${comparacao}</div>`;
+        }).join("")}</div></div>`;
+    }).join("")}</section>`;
+}
+
+function blocoEstatisticasHeroi(h) {
+  const dados = carregarSobDemanda("estatisticasHeroi", h.id, `/api/herois/${h.id}/estatisticas`);
+  if (!dados) return `<section class="painel"><div class="vazio">Carregando as estatísticas…</div></section>`;
+  if (!dados.definicoes.length) return "";
+  if (!dados.partidas.length) {
+    return `<section class="painel"><header><h2>Estatísticas de ${esc(h.nome)}</h2><small>painel do herói no Tab</small></header>
+      <div class="estats-mapeadas">${dados.definicoes.map((d) => `<span class="chip">${esc(rotuloEstat(d.rotulo))}</span>`).join("")}</div>
+      <div class="vazio">Ainda sem partidas com esses números. Abra o <kbd>Tab</kbd> durante a partida e no fim dela.</div></section>`;
+  }
+  const n = dados.partidas.length, recentes = dados.partidas.slice(-12);
+  const cor = (m) => (m.resultado === "Vitória" ? "var(--vitoria)" : m.resultado === "Derrota" ? "var(--derrota)" : "var(--texto-3)");
+  return `<section class="painel"><header><h2>Estatísticas de ${esc(h.nome)}</h2>
+      <small>painel do Tab · ${n} partida${n > 1 ? "s" : ""}</small></header>
+    <div class="tabela-estats">
+      <div class="cabeca"><span>Estatística</span><span>Média</span><span>Melhor</span><span title="média nas vitórias e nas derrotas">Vitórias · Derrotas</span><span>Últimas partidas</span></div>
+      ${dados.definicoes.map((d) => {
+        const r = resumoEstat(d, dados.partidas);
+        if (!r.com.length) return "";
+        const serie = recentes.filter((m) => m.valores[d.chave] !== undefined);
+        const maior = Math.max(1e-9, ...serie.map(r.medida));
+        const difVD = r.vitorias !== null && r.derrotas !== null ? r.vitorias - r.derrotas : null;
+        return `<div class="linha">
+          <span class="nome">${esc(rotuloEstat(d.rotulo))}</span>
+          <span><b>${valorEstat(r.media, d.tipo)}</b><small>${r.usarTaxa ? "por 10 min" : d.tipo === "num" ? "por partida" : ""}</small></span>
+          <span><b>${valorEstat(r.melhor, d.tipo)}</b><small>numa partida</small></span>
+          <span class="vd"><b style="color:var(--vitoria)">${valorEstat(r.vitorias, d.tipo)}</b> · <b style="color:var(--derrota)">${valorEstat(r.derrotas, d.tipo)}</b>
+            ${difVD !== null && Math.abs(difVD) > 0.05 * Math.max(r.vitorias, r.derrotas, 1e-9) ? `<small>${difVD > 0 ? "maior quando vence" : "maior quando perde"}</small>` : `<small>&nbsp;</small>`}</span>
+          <span class="mini-barras" title="últimas partidas (verde = vitória)">${serie.map((m) =>
+            `<i style="height:${Math.max(8, (100 * r.medida(m)) / maior)}%;background:${cor(m)}" title="${esc(`${quando(m.data_hora)}: ${valorEstat(m.valores[d.chave], d.tipo)}`)}"></i>`).join("")}</span>
+        </div>`;
+      }).join("")}
+    </div></section>`;
+}
+
 function blocoHabilidadesPartida(p) {
   if (!p.tem_habilidades) {
     return `<section class="painel"><header><h2>Suas habilidades</h2></header>
@@ -588,6 +683,7 @@ function paginaPartida(id) {
     </div>
   </section>
   ${blocoHeroisDaPartida(p)}
+  ${blocoEstatisticasPartida(p)}
   ${blocoHabilidadesPartida(p)}
   ${!p.tem_times
     ? `<section class="painel"><div class="vazio">O placar dos dois times não foi capturado nesta partida.<br>
@@ -938,6 +1034,8 @@ async function recarregarPartidas() {
   app.jogadores = {};  // os times podem ter mudado (ex.: Tab depois do fim)
   app.habilidadesPartida = {};
   app.habilidadesHeroi = {};
+  app.estatisticasPartida = {};
+  app.estatisticasHeroi = {};
   if (document.getElementById("modal").hidden) desenhar();
 }
 

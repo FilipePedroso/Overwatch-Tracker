@@ -131,7 +131,7 @@ class Monitor(threading.Thread):
         self.avisar = avisar              # avisar(texto): status para a interface
         self.ao_registrar = ao_registrar  # ao_registrar(Registro)
         self.ao_atualizar = ao_atualizar  # ao_atualizar(dict ou None): partida em andamento
-        self.ao_corrigir_placar = ao_corrigir_placar  # (placar, times): finais da última partida
+        self.ao_corrigir_placar = ao_corrigir_placar  # (placar, times, estatisticas): finais da última partida
         self._ultimo_parcial = None
         self._descartar = False
         self.config = carregar_config()
@@ -238,7 +238,8 @@ class Monitor(threading.Thread):
                     self.ao_registrar(registro)
                     self._salvar_aprendizado()
                 if any(v.startswith("Placar pós-fim") for v in vistos) and self.ao_corrigir_placar:
-                    self.ao_corrigir_placar(detector.placar_pos_fim(), detector.times_pos_fim)
+                    self.ao_corrigir_placar(detector.placar_pos_fim(), detector.times_pos_fim,
+                                            detector.estatisticas_pos_fim())
                 self._avisar_parcial()
                 if self.config["diagnostico"]:
                     self._diagnostico(bgra, largura, altura, linhas, vistos, registro, tela_inteira)

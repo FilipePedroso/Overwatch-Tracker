@@ -479,3 +479,21 @@ kbd { background: var(--painel-2); border: 1px solid var(--borda); border-bottom
 .heroi-usado b { display: block; font: 600 16px "Barlow Condensed"; text-transform: uppercase; }
 .heroi-usado small { color: var(--texto-3); font-size: 12px; }
 .herois-usados .seta { color: var(--texto-3); }
+
+/* estatísticas do herói (painel do Tab) */
+.estats { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; padding: 0 16px 16px; }
+.estat { background: var(--painel-2); border-radius: 8px; padding: 10px 12px; }
+.estat .numero { font-size: 26px; line-height: 1.1; }
+.estat-rotulo { color: var(--texto-2); font: 600 11px Inter; letter-spacing: .03em; margin-top: 3px; }
+.estat small { display: block; margin-top: 4px; font-size: 11px; font-weight: 600; }
+.estat small.acima { color: var(--vitoria); } .estat small.abaixo { color: var(--derrota); } .estat small.igual { color: var(--texto-3); }
+.estats-mapeadas { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 4px; }
+.tabela-estats { padding: 0 16px 14px; }
+.tabela-estats .cabeca, .tabela-estats .linha { display: grid; grid-template-columns: minmax(150px, 1.6fr) 1fr 1fr 1.3fr 110px; gap: 12px; align-items: center; }
+.tabela-estats .cabeca { color: var(--texto-3); font: 700 10px Inter; letter-spacing: .06em; text-transform: uppercase; padding: 0 10px 6px; }
+.tabela-estats .linha { background: var(--painel-2); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+.tabela-estats .nome { font: 600 15px "Barlow Condensed"; text-transform: uppercase; }
+.tabela-estats b { font: 700 18px "Barlow Condensed"; }
+.tabela-estats small { display: block; color: var(--texto-3); font-size: 10px; }
+.tabela-estats .mini-barras { height: 28px; margin: 0; }
+.tabela-estats .mini-barras i { opacity: .9; }

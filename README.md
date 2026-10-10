@@ -104,13 +104,45 @@ Cada partida guarda os seus heróis em ordem, com o tempo aproximado de cada um
 (página da partida, "Heróis usados", e retratos pequenos no histórico). O
 principal é o que você jogou por mais tempo.
 
-Para não entrar leitura errada (comum no começo da partida):
-- a mesma fala parada na tela, ou repetida no chat, conta uma vez só;
-- um herói só entra com 2 falas distintas, ou com a mensagem "X trocou para Y",
-  ou com o retrato da sua linha no Tab (as vantagens da linha valem meia prova);
-- um trecho sem confirmação é descartado e os vizinhos se juntam;
-- as habilidades só passam para o herói novo depois da confirmação (os apertos
-  do meio esperam e depois contam para o herói certo).
+A fonte do seu herói é o Tab: o nome escrito no painel à direita do placar.
+- Depois que o Tab mostrou o seu herói, só outro Tab muda o herói; as legendas
+  não trocam mais nada (um aliado "FELIPE" de Doomfist já virou "FILIPE").
+- A linha do tempo da partida usa só as leituras do painel. A hora de uma
+  troca é a sua primeira fala com o herói novo entre os dois Tabs.
+- Antes do primeiro Tab (ou em partidas sem Tab) valem as legendas, com
+  cuidado: a mesma fala parada na tela conta uma vez só; um herói só entra com
+  2 falas distintas ou com a mensagem "X trocou para Y"; o nome tem de ser o
+  seu, aceitando só um caractere a mais ou a menos na ponta.
+- As habilidades contam para o herói atual; depois de trocar de herói, abra o
+  Tab para o app saber.
+
+## Estatísticas do herói (painel do Tab)
+
+O Tab mostra, à direita do placar, as estatísticas próprias do herói que você
+está jogando: precisão da arma, "Cura com Ajuste", "Kits médicos hackeados"...
+O app lê esse painel a cada Tab (e no Tab depois do fim, com os números
+finais) e mostra:
+
+- na página da partida, "Estatísticas do herói", com cada número comparado à
+  sua média nas outras partidas com o herói (contagens por 10 min jogados);
+- na página do herói, a média, o melhor valor, a média nas vitórias e nas
+  derrotas e as últimas partidas de cada estatística.
+
+Como funciona (`painel.py`):
+- os rótulos e a maioria dos valores vêm do OCR; dígito sozinho vem do
+  reconhecedor próprio; os números das caixas do topo (fonte estilizada) são
+  lidos com recortes ampliados e, se for um dígito só, com o recorte repetido
+  lado a lado ("8" vira "888", que o OCR lê);
+- o herói do painel é o nome escrito nele; sem o nome, o herói cujas
+  estatísticas conhecidas batem com as da tela;
+- singular e plural viram a mesma estatística ("Kit médico hackeado" = "Kits
+  médicos hackeados"); um valor de outro tipo (um tempo lido como número) é
+  descartado.
+
+As estatísticas de cada herói ficam na tabela `estatistica_heroi`: começa com
+as já mapeadas (`referencia/estatisticas.json`) e aprende as dos outros heróis
+quando você joga com eles. Para preencher partidas antigas a partir dos prints
+guardados: `python ferramentas/recuperar_estatisticas.py --gravar`.
 
 ## Uso de habilidades
 
@@ -128,9 +160,10 @@ página do herói ("Uso de habilidades": média por partida, total, máximo e as
   várias vezes seguidas conta um uso só.
 - Não conta com o chat aberto (Enter… Enter/Esc) nem morto ("RESSURGIRÁ EM").
 - A suprema conta pelos pixels do HUD: o círculo do centro mostra a suprema
-  pronta (anel branco com brilho amarelo-esverdeado); você aperta Q e ela deixa
-  de estar pronta. Sem o Q (morreu com ela pronta, abriu o Tab) não conta. O %
-  não é usado: a fonte do jogo é difícil para o OCR, e em 100% não há número.
+  pronta (anel branco com brilho amarelo-esverdeado). Conta quando você aperta
+  Q com ela vista pronta nos últimos 4 s e depois ela some por 2 leituras
+  seguidas (a leitura oscila com efeitos na tela, como a invisibilidade da
+  Sombra). Sem o Q (morreu com ela pronta, abriu o Tab) não conta.
 - O que conta como habilidade fica em `habilidades.py`. Ficam de fora: tiros
   (o botão direito da Lifeweaver, por exemplo), habilidades sem recarga ou com
   recarga muito curta, e barreiras de segurar (Reinhardt, Brigitte...).
@@ -187,6 +220,7 @@ owtracker/
   captura.py   captura DXGI (tela cheia) com reserva GDI; acha a janela do jogo
   ocr.py       OCR do Windows (Windows.Media.Ocr) via ctypes
   placar.py    leitura do placar (Tab): acha a sua linha e as colunas
+  painel.py    painel do herói no Tab: estatísticas específicas do herói
   habilidades.py  habilidades contáveis de cada herói (tecla e recarga)
   entradas.py  leitura passiva das teclas de habilidade
   digitos.py   reconhecedor de dígitos próprio (completa o que o OCR pula)

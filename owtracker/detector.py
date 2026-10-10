@@ -22,6 +22,7 @@ from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 
 from . import catalogo, dados
+from .painel import ler_painel
 from .placar import ler_placar, ler_times, tela_do_placar
 from .habilidades import rastreaveis, suprema_pronta
 from .retratos import FUNCAO_POR_POSICAO, identificar, reconhecer_vantagens
@@ -34,6 +35,11 @@ MESMO_TAB = 15                 # s: leituras do placar tão próximas são o mes
 PARTIDA_PARADA = 900           # s sem novidade: a partida em andamento é descartada
 LEITURAS_MAPA_NOVO = 3         # leituras do Tab para aceitar um mapa fora do catálogo
 INTERVALO_TIMES = 2.5          # s entre leituras completas dos dois times no Tab
+INTERVALO_PAINEL = 2.0         # s entre leituras do painel do herói no Tab
+LEITURAS_ESTATISTICA = 2       # leituras para aceitar uma estatística que o banco ainda não conhece
+SUPREMA_VISTA = 4.0            # s: Q vale se a suprema foi vista pronta até este tempo antes
+SUPREMA_SUMIU = 2              # leituras seguidas sem a suprema pronta, depois do Q, para contar
+SUPREMA_ESPERA = 15.0          # s depois do Q para ela deixar de estar pronta
 TEMPO_MORTO = 3.5              # s sem contar habilidades depois de ver "RESSURGIR EM"
 MESMA_FALA = 20                # s: o mesmo texto visto de novo antes disso é a mesma fala na tela
 SEMELHANCA_FALA = 0.75         # textos lidos tão parecidos são a mesma fala (o OCR varia)
@@ -154,8 +160,14 @@ def fala_nova(recentes, agora, texto):
 
 
 def mesmo_nome(a, b):
+    """O mesmo nome de jogador, tolerando só um caractere a mais ou a menos na
+    ponta (lixo do OCR: "tFILIPE", "ILIPE"). Letra trocada NÃO vale: "FELIPE"
+    é outra pessoa, e um aliado com nome parecido virava você."""
     a, b = compactar(a), compactar(b)
-    return a == b or (min(len(a), len(b)) >= 4 and similaridade(a, b) >= 0.8)
+    if a == b:
+        return True
+    curto, longo = sorted((a, b), key=len)
+    return len(curto) >= 4 and len(longo) - len(curto) == 1 and curto in longo
 
 
 INDICE_MODOS_MAPA = {compactar(n) for m in catalogo.carregar()["modos"] for n in (m["nome"], m["nome_en"])}
@@ -244,9 +256,14 @@ class Partida:
     inicio: float = None                                       # quando a partida foi notada
     sinais_heroi: list = field(default_factory=list)          # (instante, nome, herói, texto, peso)
     heroi_no_tab: list = field(default_factory=list)          # (instante, heroi_id, peso) pela sua linha do Tab
-    q_em: float = float("-inf")                                # último Q apertado
-    suprema_pronta_desde: float = None                         # início do trecho com a suprema pronta
-    q_contado: float = None                                    # Q que já virou suprema contada
+    heroi_painel: list = field(default_factory=list)          # (instante, heroi_id) pelo painel do herói no Tab
+    # Painel do herói no Tab (ver painel.py): heroi_id -> {chave: {rotulo, valor, tipo, ordem, vezes}}
+    estatisticas: dict = field(default_factory=dict)
+    painel_em: float = float("-inf")
+    suprema_pronta: bool = False                               # última leitura do HUD (ver _suprema)
+    suprema_vista_em: float = float("-inf")                    # última vez que o HUD mostrou a suprema pronta
+    sem_suprema: int = 0                                       # leituras seguidas sem ela pronta
+    q_pendente: float = None                                   # Q apertado com ela pronta, a confirmar
 
     def mapa_final(self):
         """O cabeçalho do Tab ("ESCOLTA | GRÍMSVÖTN") é a fonte mais confiável.
@@ -271,12 +288,17 @@ class Partida:
         """Seus heróis em ordem, com o tempo de cada um:
         [{"heroi_id", "desde", "segundos"}].
 
-        Cada fala distinta vale 1 (a mesma fala parada na tela, lida a cada
+        A fonte é o painel do herói no Tab (o nome escrito à direita do
+        placar): se ele foi lido na partida, só ele vale. As legendas só
+        entram quando o Tab não foi aberto nenhuma vez; aí:
+        cada fala distinta vale 1 (a mesma fala parada na tela, lida a cada
         segundo, conta uma vez só); a sua linha do Tab e "X trocou para Y"
         valem 2. Um trecho só entra com peso 2 ou mais: uma leitura errada
         isolada (comum no começo da partida) some, e os vizinhos se juntam."""
         if not nome_jogador and self.falas:
             nome_jogador = max(self.falas, key=lambda n: sum(self.falas[n].values()))
+        if self.heroi_painel:
+            return self._herois_pelo_painel(nome_jogador, fim)
         eventos, recentes = [], []
         for t, nome, heroi_nome, texto, peso in self.sinais_heroi:
             heroi = catalogo.heroi(heroi_nome)
@@ -304,6 +326,44 @@ class Partida:
             juntos.append({"heroi_id": x["heroi_id"], "desde": x["desde"]})
         if juntos and self.inicio is not None:
             juntos[0]["desde"] = min(juntos[0]["desde"], self.inicio)
+        for i, x in enumerate(juntos):
+            ate = juntos[i + 1]["desde"] if i + 1 < len(juntos) else max(fim, x["desde"])
+            x["segundos"] = round(ate - x["desde"])
+        return juntos
+
+    def _herois_pelo_painel(self, nome_jogador, fim):
+        """Linha do tempo só com o que o painel do Tab mostrou. Uma leitura
+        isolada entre duas do mesmo herói é erro de OCR e some. A hora da
+        troca é a primeira fala sua com o herói novo entre os dois Tabs (ou,
+        sem fala, o primeiro Tab com ele)."""
+        leituras = sorted(self.heroi_painel)
+        grupos = []  # [heroi_id, primeira, última, quantas]
+        for t, h in leituras:
+            if grupos and grupos[-1][0] == h:
+                grupos[-1][2], grupos[-1][3] = t, grupos[-1][3] + 1
+            else:
+                grupos.append([h, t, t, 1])
+        limpos = []
+        for i, g in enumerate(grupos):
+            isolado = g[3] == 1 and 0 < i < len(grupos) - 1 and grupos[i - 1][0] == grupos[i + 1][0]
+            if isolado:
+                continue
+            if limpos and limpos[-1][0] == g[0]:
+                limpos[-1][2] = g[2]
+            else:
+                limpos.append(list(g))
+        juntos = []
+        for i, (h, primeira, _, _) in enumerate(limpos):
+            desde = primeira
+            if i == 0:
+                desde = min(primeira, self.inicio if self.inicio is not None else primeira)
+            else:
+                nome = catalogo.heroi(h)["nome"]
+                falas = [t for t, quem, heroi_nome, _, _ in self.sinais_heroi
+                         if limpos[i - 1][2] < t <= primeira and heroi_nome == nome
+                         and mesmo_nome(quem, nome_jogador or "")]
+                desde = min(falas, default=primeira)
+            juntos.append({"heroi_id": h, "desde": desde})
         for i, x in enumerate(juntos):
             ate = juntos[i + 1]["desde"] if i + 1 < len(juntos) else max(fim, x["desde"])
             x["segundos"] = round(ate - x["desde"])
@@ -341,6 +401,7 @@ class Registro:
     times: dict = None  # aliados e inimigos lidos no Tab (ver placar.ler_times)
     habilidades: list = field(default_factory=list)  # [{heroi_id, habilidade_id, usos}]
     herois: list = field(default_factory=list)  # seus heróis em ordem: [{heroi_id, segundos}]
+    estatisticas: list = field(default_factory=list)  # painel do Tab: [{heroi_id, chave, rotulo, valor, tipo, ordem}]
 
 
 class Detector:
@@ -358,6 +419,8 @@ class Detector:
         self.contexto_fim = (None, {})   # herói e falas da partida que acabou
         self.times_pos_fim, self.times_pos_fim_em = None, float("-inf")
         self.eventos = deque(maxlen=5000)  # (instante, texto) para o registro de teclas
+        self.estatisticas_conhecidas = {}  # heroi_id -> {chave: tipo} já no banco (o monitor entrega)
+        self.estat_pos_fim, self.painel_pos_fim_em = {}, float("-inf")  # painel lido depois do fim
         # Em quantas partidas cada nome falou: os colegas mudam, você não.
         self.partidas_por_falante = Counter(partidas_por_falante or {})
 
@@ -405,9 +468,11 @@ class Detector:
                 if p.heroi_atual:
                     self._soltar_apertos(p, p.heroi_atual)
             if tecla == "q":
-                p.q_em = quando
-                pronta = p.suprema_pronta_desde is not None
-                self._evento(quando, f"q (suprema {'pronta' if pronta else 'não pronta'} no HUD)")
+                ha = quando - p.suprema_vista_em
+                if ha <= SUPREMA_VISTA and p.q_pendente is None:
+                    p.q_pendente = quando
+                self._evento(quando, "q (suprema " + (f"vista pronta há {max(ha, 0):.1f} s" if ha <= SUPREMA_VISTA
+                                                      else "não estava pronta") + ")")
             elif not p.heroi_atual or p.candidato:
                 p.apertos_pendentes.append((tecla, quando))  # contam quando o herói for confirmado
                 del p.apertos_pendentes[:-300]
@@ -439,14 +504,17 @@ class Detector:
             self._evento(quando, f"{tecla}: em recarga ({quando - anterior:.1f} s de {habilidade['recarga']:g} s)")
 
     def _heroi_do_jogador(self, heroi_nome, texto, agora, peso=1):
-        """Uma fala sua nas legendas. O herói atual (o dono das habilidades
-        apertadas) só muda depois de confirmado: duas falas distintas, a troca
-        anunciada pelo jogo ou a sua linha do Tab. Enquanto isso os apertos
-        esperam, e depois contam para o herói certo."""
+        """Uma fala sua nas legendas: vale só até o primeiro Tab da partida
+        (o painel do herói no Tab é a fonte; ver _tab). Até lá o herói atual
+        (o dono das habilidades apertadas) só muda depois de confirmado: duas
+        falas distintas ou a troca anunciada pelo jogo. Enquanto isso os
+        apertos esperam, e depois contam para o herói certo."""
         heroi = catalogo.heroi(heroi_nome)
         if not heroi:
             return
         p, h = self.partida, heroi["id"]
+        if p.heroi_painel:
+            return  # o painel do Tab já disse quem você é: legendas não trocam mais o herói
         if h == p.heroi_atual:
             if p.candidato:  # o candidato era leitura errada
                 p.candidato = None
@@ -486,25 +554,33 @@ class Detector:
         return None, 0
 
     def _suprema(self, tela, agora):
-        """Suprema usada: o HUD mostrava a suprema pronta, você apertou Q
-        enquanto ela estava pronta, e depois ela deixou de estar pronta. Algumas
-        supremas mantêm o círculo aceso enquanto duram (vários disparos), então
-        o Q vale em qualquer momento do trecho em que ela esteve pronta. Morrer
-        com ela pronta não conta: sem Q, o HUD sumir é só a morte."""
+        """Suprema usada: você apertou Q com a suprema pronta no HUD (vista
+        nos últimos segundos) e depois ela deixou de estar pronta.
+
+        A leitura do HUD oscila (efeitos na tela, invisibilidade da Sombra):
+        some por um ou dois segundos e volta. Por isso o Q vale se ela foi
+        vista pronta pouco antes, e o uso só é confirmado depois de leituras
+        seguidas sem ela. Morrer com ela pronta não conta: não houve Q."""
         if tela is None:
             return
         p = self.partida
         pronta = suprema_pronta(tela.pixel, tela.largura, tela.altura)
-        if pronta and p.suprema_pronta_desde is None:
-            p.suprema_pronta_desde = agora
-            self._evento(agora, "HUD: suprema pronta")
-        elif not pronta and p.suprema_pronta_desde is not None:
-            usou = p.q_em >= p.suprema_pronta_desde - 1.5 and p.q_em != p.q_contado
-            self._evento(agora, "HUD: suprema não está mais pronta" + (" (houve Q)" if usou else " (sem Q)"))
-            if usou:
-                p.q_contado = p.q_em
-                self._usou_suprema(p, p.q_em)
-            p.suprema_pronta_desde = None
+        if pronta != p.suprema_pronta:
+            p.suprema_pronta = pronta
+            self._evento(agora, "HUD: suprema pronta" if pronta else "HUD: suprema não está mais pronta")
+        if pronta:
+            p.suprema_vista_em, p.sem_suprema = agora, 0
+        else:
+            p.sem_suprema += 1
+        if p.q_pendente is None:
+            return
+        if not pronta and p.sem_suprema >= SUPREMA_SUMIU:
+            quando, p.q_pendente = p.q_pendente, None
+            p.suprema_vista_em = float("-inf")  # gasta: outro Q só vale com ela pronta de novo
+            self._usou_suprema(p, quando)
+        elif agora - p.q_pendente > SUPREMA_ESPERA:
+            self._evento(agora, "q descartado: a suprema continuou pronta")
+            p.q_pendente = None
 
     def _usou_suprema(self, p, quando):
         if not p.heroi_atual or p.candidato:
@@ -537,6 +613,11 @@ class Detector:
                             heroi, falas = self.contexto_fim
                             self.times_pos_fim = self._identificar(times, heroi, falas, self.placar_pos_fim())
                             self.times_pos_fim_em = agora
+                    if agora - self.painel_pos_fim_em >= INTERVALO_PAINEL:
+                        self.painel_pos_fim_em = agora
+                        ultimo = catalogo.heroi(self.contexto_fim[0]) if self.contexto_fim[0] else None
+                        self._painel(linhas, largura, altura, tela, self.estat_pos_fim,
+                                     ultimo["id"] if ultimo else None)
                     return None, [f"Placar pós-fim: {placar}"]
             return None, []  # tela de fim/destaque da partida que acabou de ser registrada
 
@@ -625,11 +706,74 @@ class Detector:
                 heroi_id, peso = self._heroi_na_sua_linha(times)
                 if heroi_id:
                     p.heroi_no_tab.append((agora, heroi_id, peso))
-                    if peso >= CONFIRMA_HEROI and heroi_id != p.heroi_atual:
-                        self._evento(agora, f"herói confirmado pelo Tab: {heroi_id}")
+                    if peso >= CONFIRMA_HEROI and heroi_id != p.heroi_atual and not p.heroi_painel:
+                        self._evento(agora, f"herói confirmado pelo retrato no Tab: {heroi_id}")
                         self._confirmar_heroi(heroi_id)
                     mensagens.append(f"Seu herói no Tab: {heroi_id} (peso {peso})")
+        if agora - p.painel_em >= INTERVALO_PAINEL:
+            p.painel_em = agora
+            heroi_id, forte = self._painel(linhas, largura, altura, tela, p.estatisticas,
+                                           None if p.candidato else p.heroi_atual)
+            if heroi_id:
+                mensagens.append(f"Painel do herói: {heroi_id} ({len(p.estatisticas[heroi_id])} estatísticas)")
+            if forte:  # o painel diz quem é o seu herói naquele momento: é a fonte
+                p.heroi_painel.append((agora, heroi_id))
+                if heroi_id != p.heroi_atual or p.candidato:
+                    self._evento(agora, f"herói confirmado pelo painel do Tab: {heroi_id}")
+                    self._confirmar_heroi(heroi_id)
         return mensagens
+
+    def _painel(self, linhas, largura, altura, tela, destino, heroi_padrao):
+        """Lê o painel do herói no Tab e guarda as estatísticas em destino
+        (heroi_id -> {chave: ...}). O herói é o nome escrito no painel; se o
+        OCR não o leu, o herói cujas estatísticas conhecidas batem com as da
+        tela; por último, heroi_padrao. Retorna (heroi_id, forte): forte =
+        veio do próprio painel (nome ou estatísticas), não do padrão."""
+        painel = ler_painel(linhas, largura, altura, tela)
+        if not painel:
+            return None, False
+        heroi = catalogo.heroi(painel["heroi"]) if painel["heroi"] else None
+        pelas_estatisticas = None if heroi else self._heroi_pelas_estatisticas(
+            {e["chave"] for e in painel["estatisticas"]}, heroi_padrao)
+        heroi_id = heroi["id"] if heroi else pelas_estatisticas or heroi_padrao
+        if not heroi_id:
+            return None, False
+        conhecidas = self.estatisticas_conhecidas.get(heroi_id, {})
+        guardadas = destino.setdefault(heroi_id, {})
+        for e in painel["estatisticas"]:
+            anterior = guardadas.get(e["chave"])
+            tipo = conhecidas.get(e["chave"]) or (anterior or e)["tipo"]
+            if e["tipo"] != tipo:
+                continue  # "15:12" lido como 1512: valor de outro tipo é leitura errada
+            guardadas[e["chave"]] = {
+                **e, "vezes": (anterior["vezes"] if anterior else 0) + 1,
+                # o jogo alterna singular/plural: fica o rótulo mais longo (plural)
+                "rotulo": max(e["rotulo"], anterior["rotulo"] if anterior else "", key=len),
+                "ordem": anterior["ordem"] if anterior and e["ordem"] == 0 else e["ordem"]}
+        return heroi_id, heroi is not None or pelas_estatisticas is not None
+
+    def _heroi_pelas_estatisticas(self, chaves, heroi_padrao):
+        """Sem o nome lido no painel: o herói cujas estatísticas conhecidas
+        cobrem melhor as que estão na tela (3 ou mais, sem empate)."""
+        pontos = Counter({h: len(chaves & set(conhecidas)) for h, conhecidas in self.estatisticas_conhecidas.items()})
+        melhores = pontos.most_common(2)
+        if not melhores or melhores[0][1] < 3:
+            return None
+        if pontos[heroi_padrao] == melhores[0][1]:
+            return heroi_padrao
+        return melhores[0][0] if len(melhores) == 1 or melhores[0][1] > melhores[1][1] else None
+
+    def _estatisticas_finais(self, guardadas):
+        """[{heroi_id, chave, rotulo, valor, tipo, ordem}]: só o que foi lido
+        mais de uma vez ou já é conhecido (um rótulo mal lido uma vez não entra)."""
+        return [{"heroi_id": heroi_id, **{k: e[k] for k in ("chave", "rotulo", "valor", "tipo", "ordem")}}
+                for heroi_id, estatisticas in guardadas.items()
+                for e in sorted(estatisticas.values(), key=lambda e: e["ordem"])
+                if e["vezes"] >= LEITURAS_ESTATISTICA
+                or e["chave"] in self.estatisticas_conhecidas.get(heroi_id, {})]
+
+    def estatisticas_pos_fim(self):
+        return self._estatisticas_finais(self.estat_pos_fim)
 
     def _identificar(self, times, heroi, falas, placar):
         """Heróis de cada linha (ver retratos.identificar). Na sua linha valem
@@ -769,6 +913,8 @@ class Detector:
             # apertos esperando confirmação: vão para o herói em que você terminou
             self._soltar_apertos(p, p.heroi_atual or linha_do_tempo[-1]["heroi_id"])
         registro.habilidades = self._usos_da_partida(p)
+        registro.estatisticas = self._estatisticas_finais(p.estatisticas)
+        self.estat_pos_fim, self.painel_pos_fim_em = {}, float("-inf")
         if p.times:
             # na sua linha do Tab está o herói daquele momento (pode ter trocado)
             no_tab = [x for x in linha_do_tempo if x["desde"] <= p.times_em]
