@@ -703,12 +703,10 @@ class Detector:
             if times and coerente(_seus_valores(times), p.placar.final()):
                 p.times, p.times_em = times, agora
                 mensagens.append("Times lidos no Tab")
+                # O retrato da sua linha é só um indício fraco (a biblioteca já
+                # confundiu Rainha Junker com Roadhog): quem diz o herói é o painel.
                 heroi_id, peso = self._heroi_na_sua_linha(times)
-                if heroi_id:
-                    p.heroi_no_tab.append((agora, heroi_id, peso))
-                    if peso >= CONFIRMA_HEROI and heroi_id != p.heroi_atual and not p.heroi_painel:
-                        self._evento(agora, f"herói confirmado pelo retrato no Tab: {heroi_id}")
-                        self._confirmar_heroi(heroi_id)
+                if heroi_id:  # só informativo: não entra na linha do tempo
                     mensagens.append(f"Seu herói no Tab: {heroi_id} (peso {peso})")
         if agora - p.painel_em >= INTERVALO_PAINEL:
             p.painel_em = agora
@@ -733,11 +731,13 @@ class Detector:
         if not painel:
             return None, False
         heroi = catalogo.heroi(painel["heroi"]) if painel["heroi"] else None
-        pelas_estatisticas = None if heroi else self._heroi_pelas_estatisticas(
-            {e["chave"] for e in painel["estatisticas"]}, heroi_padrao)
+        chaves = {e["chave"] for e in painel["estatisticas"]}
+        pelas_estatisticas = None if heroi else self._heroi_pelas_estatisticas(chaves)
         heroi_id = heroi["id"] if heroi else pelas_estatisticas or heroi_padrao
         if not heroi_id:
             return None, False
+        if not heroi and not pelas_estatisticas and self._painel_de_outro_heroi(chaves, heroi_id):
+            return None, False  # sem nome e com estatísticas que não são do herói padrão: não arrisca
         conhecidas = self.estatisticas_conhecidas.get(heroi_id, {})
         guardadas = destino.setdefault(heroi_id, {})
         for e in painel["estatisticas"]:
@@ -752,16 +752,26 @@ class Detector:
                 "ordem": anterior["ordem"] if anterior and e["ordem"] == 0 else e["ordem"]}
         return heroi_id, heroi is not None or pelas_estatisticas is not None
 
-    def _heroi_pelas_estatisticas(self, chaves, heroi_padrao):
-        """Sem o nome lido no painel: o herói cujas estatísticas conhecidas
-        cobrem melhor as que estão na tela (3 ou mais, sem empate)."""
-        pontos = Counter({h: len(chaves & set(conhecidas)) for h, conhecidas in self.estatisticas_conhecidas.items()})
-        melhores = pontos.most_common(2)
-        if not melhores or melhores[0][1] < 3:
+    def _heroi_pelas_estatisticas(self, chaves):
+        """Sem o nome lido no painel: o herói dono das estatísticas da tela.
+        Só contam as que são de um herói só ("Abates com a Corrente de
+        Gancho"); as comuns a vários ("Auto-cura", "Jogadores protegidos")
+        não dizem nada. Precisa de 2 ou mais, e de nenhuma de outro herói."""
+        donos = defaultdict(set)
+        for heroi_id, conhecidas in self.estatisticas_conhecidas.items():
+            for chave in conhecidas:
+                donos[chave].add(heroi_id)
+        pontos = Counter(next(iter(donos[c])) for c in chaves if len(donos.get(c, ())) == 1)
+        if len(pontos) != 1:
             return None
-        if pontos[heroi_padrao] == melhores[0][1]:
-            return heroi_padrao
-        return melhores[0][0] if len(melhores) == 1 or melhores[0][1] > melhores[1][1] else None
+        heroi_id, quantas = pontos.most_common(1)[0]
+        return heroi_id if quantas >= 2 else None
+
+    def _painel_de_outro_heroi(self, chaves, heroi_id):
+        """True se as estatísticas da tela não parecem as que já conhecemos
+        desse herói (o painel é de outro, que ainda não foi identificado)."""
+        conhecidas = self.estatisticas_conhecidas.get(heroi_id, {})
+        return len(conhecidas) >= 4 and len(chaves & set(conhecidas)) < 0.6 * len(chaves)
 
     def _estatisticas_finais(self, guardadas):
         """[{heroi_id, chave, rotulo, valor, tipo, ordem}]: só o que foi lido

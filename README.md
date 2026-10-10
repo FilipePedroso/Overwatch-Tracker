@@ -133,8 +133,11 @@ Como funciona (`painel.py`):
   reconhecedor próprio; os números das caixas do topo (fonte estilizada) são
   lidos com recortes ampliados e, se for um dígito só, com o recorte repetido
   lado a lado ("8" vira "888", que o OCR lê);
-- o herói do painel é o nome escrito nele; sem o nome, o herói cujas
-  estatísticas conhecidas batem com as da tela;
+- o herói do painel é o nome escrito nele. A fonte é estilizada e o OCR lê
+  torto ("ROBOHOG", "RRlNHIJUNKfR"): várias leituras, cada uma comparada com
+  a lista de heróis, e ganha o mais votado com folga. Sem o nome, vale o herói
+  dono das estatísticas exclusivas da tela (as comuns a vários, como
+  "Auto-cura", não contam). O retrato da sua linha não decide nada;
 - singular e plural viram a mesma estatística ("Kit médico hackeado" = "Kits
   médicos hackeados"); um valor de outro tipo (um tempo lido como número) é
   descartado.

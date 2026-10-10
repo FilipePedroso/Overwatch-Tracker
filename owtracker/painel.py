@@ -27,6 +27,9 @@ MESMO_X = 0.006                                 # rótulos alinhados à esquerda
 VALOR_ACIMA = (0.012, 0.036)                    # distância valor -> rótulo
 ALTURA_VALOR = 0.022
 NOME_HEROI = (-0.004, 0.335, 0.170, 0.055)      # x relativo a X, y, l, a
+NOME_HEROI_ALTO = (-0.005, 0.324, 0.219, 0.074)  # recorte maior (nomes longos)
+NOTA_NOME = 0.60                                # semelhança mínima do nome lido com o do herói
+FOLGA_NOME = 0.12                               # ... e folga sobre o segundo herói mais parecido
 DESTAQUE_ROTULO = (0.080, 0.185, 0.215, 0.320)  # x0/x1 relativos a X, y0, y1 (uma ou duas caixas)
 DESTAQUE_VALOR = (0.091, -0.052, 0.099, 0.048)  # número: x relativo a X, y relativo ao rótulo, l, a
 DESTAQUE_JUSTO = (0.1224, -0.0463, 0.0365, 0.0426)  # só o meio (um dígito)
@@ -192,11 +195,32 @@ def _destaques(linhas, x_painel, largura, altura, tela):
 
 
 def _nome_do_heroi(x_painel, largura, altura, tela):
-    from .detector import heroi_no_inicio
+    """O nome do herói é na fonte estilizada do jogo e o OCR o lê torto
+    ("ROBOHOG", "SOMBRI", "RRlNHIJUNKfR"). Por isso: várias leituras (dois
+    recortes, três ampliações) e, em cada uma, o herói de nome mais parecido;
+    ganha o mais votado, se for parecido o bastante e com folga sobre o
+    segundo. Retorna o nome do herói ou None."""
+    from .detector import INDICE_HEROIS, compactar, similaridade
 
-    x, y, l, a = NOME_HEROI
-    for lida in tela.ler_faixa(x_painel + x * largura, y * altura, l * largura, a * altura, ampliacao=2):
-        heroi = heroi_no_inicio(lida.texto)
-        if heroi:
-            return heroi
-    return None
+    votos = Counter()
+    for x, y, l, a in (NOME_HEROI, NOME_HEROI_ALTO):
+        for ampliacao in (1, 2, 3):
+            for lida in tela.ler_faixa(x_painel + x * largura, y * altura, l * largura, a * altura,
+                                       ampliacao=ampliacao):
+                texto = compactar(lida.texto)
+                if len(texto) < 3:
+                    continue
+                notas = Counter()
+                for chave, nome in INDICE_HEROIS.items():
+                    notas[nome] = max(notas[nome], similaridade(texto, chave))
+                (melhor, nota), (_, segunda) = notas.most_common(2)
+                if nota >= NOTA_NOME and nota - segunda >= FOLGA_NOME:
+                    votos[melhor] += nota
+            if len(votos) == 1 and sum(votos.values()) >= 2 * NOTA_NOME + 0.2:
+                return next(iter(votos))  # duas leituras boas do mesmo herói: basta
+    if not votos:
+        return None
+    melhores = votos.most_common(2)
+    if len(melhores) > 1 and melhores[0][1] < 2 * melhores[1][1]:
+        return None  # leituras divididas entre dois heróis
+    return melhores[0][0]
