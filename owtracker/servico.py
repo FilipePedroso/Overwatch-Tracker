@@ -107,6 +107,10 @@ class Servico:
             p["tem_habilidades"] = p["id"] in com_habilidades
         return partidas
 
+    def inimigos(self):
+        with self.trava:
+            return self.banco.inimigos_das_partidas()
+
     def estatisticas_da_partida(self, id_partida):
         with self.trava:
             return self.banco.estatisticas_da_partida(id_partida)

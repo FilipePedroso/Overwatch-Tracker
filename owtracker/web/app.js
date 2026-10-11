@@ -28,6 +28,7 @@ const app = {
   jogadores: {},  // times de cada partida, carregados sob demanda
   habilidadesPartida: {},  // uso de habilidades por partida (sob demanda)
   habilidadesHeroi: {},    // uso de habilidades por herói (sob demanda)
+  inimigos: {},            // heróis inimigos de cada partida, para o winrate contra (sob demanda)
   estatisticasPartida: {}, // painel do herói no Tab, por partida (sob demanda)
   estatisticasHeroi: {},   // idem, todas as partidas de um herói (sob demanda)
   filtros: carregarFiltros(),
@@ -379,6 +380,65 @@ function paginaHerois() {
   </section>`;
 }
 
+function melhoresEPiores(grupos, quantos = 3) {
+  // grupos: [[chave, partidas]]. Uma regra só, igual com qualquer filtro:
+  // winrate de 50% ou mais vai para os melhores, abaixo disso para os piores.
+  // No empate vem primeiro quem tem mais partidas (amostra maior).
+  const base = grupos.filter(([, x]) => taxa(x) !== null);
+  const melhores = base.filter(([, x]) => taxa(x) >= 50)
+    .sort((a, b) => taxa(b[1]) - taxa(a[1]) || b[1].length - a[1].length).slice(0, quantos);
+  const piores = base.filter(([, x]) => taxa(x) < 50)
+    .sort((a, b) => taxa(a[1]) - taxa(b[1]) || b[1].length - a[1].length).slice(0, quantos);
+  return { melhores, piores };
+}
+
+function blocoModosDoHeroi(l) {
+  const porModo = agrupar(l, (p) => mapaDe(p)?.modo);
+  return `<section class="painel"><header><h2>Modos de mapa</h2><small>seu winrate com este herói</small></header><div class="modos">
+    ${app.catalogo.modos.map((mo) => { const x = porModo.get(mo.id) || [], tm = taxa(x);
+      return `<div class="modo ${x.length ? "" : "sem-jogos"}" title="${esc(mo.descricao)}"><img src="${mo.icone}" alt=""><b style="color:${corTaxa(tm)}">${pct(tm)}</b><small>${esc(mo.nome)}</small><small>${x.length} jogo${x.length === 1 ? "" : "s"}</small></div>`; }).join("")}</div></section>`;
+}
+
+function blocoMapasDoHeroi(l) {
+  const r = melhoresEPiores([...agrupar(l, (p) => mapaDe(p)?.id).entries()]);
+  if (!r.melhores.length && !r.piores.length) return "";
+  const item = ([id, x]) => { const m = app.ref.mapa[id], mo = app.ref.modo[m.modo];
+    return `<a class="sem-estilo" href="#/mapas/${id}">${itemBarra(mo.icone, "var(--laranja)", m.nome, x)}</a>`; };
+  return `<section class="painel"><header><h2>Mapas</h2><small>seu winrate com este herói</small></header>
+    ${r.melhores.length ? `<div class="rotulo-lista vitoria">Melhores</div><div class="lista">${r.melhores.map(item).join("")}</div>` : ""}
+    ${r.piores.length ? `<div class="rotulo-lista derrota">Piores</div><div class="lista">${r.piores.map(item).join("")}</div>` : ""}</section>`;
+}
+
+let funcaoContra = "todas";  // filtro de função dos inimigos em "Contra heróis"
+function blocoContraHerois(l) {
+  const inimigos = carregarSobDemanda("inimigos", "todas", "/api/inimigos");
+  if (!inimigos) return `<section class="painel"><div class="vazio">Carregando os confrontos…</div></section>`;
+  const contra = new Map();
+  let comTimes = 0;
+  for (const p of l) {
+    const lista = inimigos[p.id];
+    if (!lista) continue;
+    comTimes += 1;
+    for (const id of new Set(lista)) { if (!contra.has(id)) contra.set(id, []); contra.get(id).push(p); }
+  }
+  if (!comTimes) {
+    return `<section class="painel"><header><h2>Contra heróis</h2></header>
+      <div class="vazio">Sem partidas com o time inimigo lido. Abra o <kbd>Tab</kbd> na partida para o app registrar os inimigos.</div></section>`;
+  }
+  const abas = [["todas", "Todos"], ...app.catalogo.funcoes.map((f) => [f.id, f.nome])];
+  const filtro = `<div class="chips pequenas" data-funcao-contra>${abas.map(([id, n]) =>
+    `<button data-valor="${id}" class="${funcaoContra === id ? "ativo" : ""}">${n}</button>`).join("")}</div>`;
+  const r = melhoresEPiores([...contra.entries()].filter(([id]) =>
+    app.ref.heroi[id] && (funcaoContra === "todas" || app.ref.heroi[id].funcao === funcaoContra)), 4);
+  const item = ([id, x]) => { const h = app.ref.heroi[id];
+    return `<a class="sem-estilo" href="#/herois/${id}">${itemBarra(h.retrato, CORES_FUNCAO[h.funcao], h.nome, x)}</a>`; };
+  return `<section class="painel"><header><h2>Contra heróis</h2><small>${comTimes} partida${comTimes > 1 ? "s" : ""} com os inimigos lidos</small></header>
+    <div class="filtro-bloco">${filtro}</div>
+    ${r.melhores.length ? `<div class="rotulo-lista vitoria">Você vence mais contra</div><div class="lista contra">${r.melhores.map(item).join("")}</div>`
+      : r.piores.length ? "" : `<div class="vazio">Nenhum confronto com heróis dessa função.</div>`}
+    ${r.piores.length ? `<div class="rotulo-lista derrota">Você perde mais contra</div><div class="lista contra">${r.piores.map(item).join("")}</div>` : ""}</section>`;
+}
+
 function paginaHeroi(id) {
   const h = app.ref.heroi[id];
   if (!h) return `<div class="vazio">Herói não encontrado.</div>`;
@@ -432,6 +492,7 @@ function paginaHeroi(id) {
     <div class="coluna">
       <section class="painel"><header><h2>Suas partidas</h2></header>
         <div class="partidas">${l.slice(0, 10).map((p) => linhaPartidaCurta(p)).join("") || `<div class="vazio">Você ainda não jogou de ${esc(h.nome)} neste filtro.</div>`}</div></section>
+      ${l.length ? blocoModosDoHeroi(l) + blocoMapasDoHeroi(l) + blocoContraHerois(l) : ""}
     </div>
   </div>`;
 }
@@ -913,6 +974,7 @@ document.addEventListener("click", async (e) => {
   const chips = alvo.closest("[data-filtro]");
   if (chips && d.valor !== undefined) { app.filtros[chips.dataset.filtro] = d.valor; salvarFiltros(); return desenhar(); }
   if (alvo.closest("[data-funcao-herois]") && d.valor) { funcaoHerois = d.valor; return desenhar(); }
+  if (alvo.closest("[data-funcao-contra]") && d.valor) { funcaoContra = d.valor; return desenhar(); }
   if (alvo.closest("#resultado") && d.valor) {
     alvo.parentElement.querySelectorAll("button").forEach((b) => b.classList.toggle("ativo", b === alvo));
     return;
@@ -1035,6 +1097,7 @@ async function recarregarPartidas() {
   app.habilidadesPartida = {};
   app.habilidadesHeroi = {};
   app.estatisticasPartida = {};
+  app.inimigos = {};
   app.estatisticasHeroi = {};
   if (document.getElementById("modal").hidden) desenhar();
 }

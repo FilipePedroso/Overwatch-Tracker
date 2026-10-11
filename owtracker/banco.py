@@ -345,6 +345,16 @@ class Banco:
     def partidas_com_habilidades(self):
         return {r[0] for r in self.con.execute("SELECT DISTINCT partida_id FROM habilidades_partida")}
 
+    def inimigos_das_partidas(self):
+        """{partida_id: [heroi_id dos inimigos identificados]}, para o winrate
+        contra cada herói."""
+        saida = {}
+        for r in self.con.execute(
+                "SELECT partida_id, heroi_id FROM jogadores "
+                "WHERE time = 'inimigos' AND heroi_id IS NOT NULL ORDER BY partida_id, posicao"):
+            saida.setdefault(r[0], []).append(r[1])
+        return saida
+
     def partidas_com_jogadores(self):
         return {r[0] for r in self.con.execute("SELECT DISTINCT partida_id FROM jogadores")}
 

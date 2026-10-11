@@ -497,3 +497,15 @@ kbd { background: var(--painel-2); border: 1px solid var(--borda); border-bottom
 .tabela-estats small { display: block; color: var(--texto-3); font-size: 10px; }
 .tabela-estats .mini-barras { height: 28px; margin: 0; }
 .tabela-estats .mini-barras i { opacity: .9; }
+
+/* página do herói: melhores e piores (mapas e confrontos) */
+.rotulo-lista { font: 700 10px Inter; letter-spacing: .08em; text-transform: uppercase; padding: 2px 16px 6px; }
+.rotulo-lista.vitoria { color: var(--vitoria); } .rotulo-lista.derrota { color: var(--derrota); padding-top: 8px; }
+a.sem-estilo { color: inherit; text-decoration: none; display: block; }
+a.sem-estilo:hover .nome { color: var(--laranja); }
+.lista.contra .icone img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
+.lista.contra .icone { padding: 0; overflow: hidden; }
+.modo.sem-jogos { opacity: .4; }
+.filtro-bloco { padding: 0 16px 10px; }
+.chips.pequenas { display: inline-flex; }
+.chips.pequenas button { font-size: 11px; padding: 3px 9px; }

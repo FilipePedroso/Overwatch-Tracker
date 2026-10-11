@@ -99,6 +99,8 @@ class _Manipulador(BaseHTTPRequestHandler):
                 return self._json(s.estado())
             if rota == "/api/partidas":
                 return self._json(s.partidas())
+            if rota == "/api/inimigos":
+                return self._json(s.inimigos())
             if rota == "/api/catalogo":
                 return self._json(s.catalogo())
             m = re.fullmatch(r"/api/partidas/(\d+)/jogadores", rota)
