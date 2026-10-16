@@ -37,6 +37,7 @@ LEITURAS_MAPA_NOVO = 3         # leituras do Tab para aceitar um mapa fora do ca
 INTERVALO_TIMES = 2.5          # s entre leituras completas dos dois times no Tab
 INTERVALO_PAINEL = 2.0         # s entre leituras do painel do herói no Tab
 LEITURAS_ESTATISTICA = 2       # leituras para aceitar uma estatística que o banco ainda não conhece
+FALAS_RECENTES = 90            # s: suas falas desse tempo dizem de quem é um painel sem nome
 SUPREMA_VISTA = 4.0            # s: Q vale se a suprema foi vista pronta até este tempo antes
 SUPREMA_SUMIU = 2              # leituras seguidas sem a suprema pronta, depois do Q, para contar
 SUPREMA_ESPERA = 15.0          # s depois do Q para ela deixar de estar pronta
@@ -617,7 +618,7 @@ class Detector:
                         self.painel_pos_fim_em = agora
                         ultimo = catalogo.heroi(self.contexto_fim[0]) if self.contexto_fim[0] else None
                         self._painel(linhas, largura, altura, tela, self.estat_pos_fim,
-                                     ultimo["id"] if ultimo else None)
+                                     ultimo["id"] if ultimo else None, agora, recentes=False)
                     return None, [f"Placar pós-fim: {placar}"]
             return None, []  # tela de fim/destaque da partida que acabou de ser registrada
 
@@ -711,7 +712,7 @@ class Detector:
         if agora - p.painel_em >= INTERVALO_PAINEL:
             p.painel_em = agora
             heroi_id, forte = self._painel(linhas, largura, altura, tela, p.estatisticas,
-                                           None if p.candidato else p.heroi_atual)
+                                           None if p.candidato else p.heroi_atual, agora)
             if heroi_id:
                 mensagens.append(f"Painel do herói: {heroi_id} ({len(p.estatisticas[heroi_id])} estatísticas)")
             if forte:  # o painel diz quem é o seu herói naquele momento: é a fonte
@@ -721,26 +722,41 @@ class Detector:
                     self._confirmar_heroi(heroi_id)
         return mensagens
 
-    def _painel(self, linhas, largura, altura, tela, destino, heroi_padrao):
+    def _painel(self, linhas, largura, altura, tela, destino, heroi_padrao, agora=None, recentes=True):
         """Lê o painel do herói no Tab e guarda as estatísticas em destino
-        (heroi_id -> {chave: ...}). O herói é o nome escrito no painel; se o
-        OCR não o leu, o herói cujas estatísticas conhecidas batem com as da
-        tela; por último, heroi_padrao. Retorna (heroi_id, forte): forte =
-        veio do próprio painel (nome ou estatísticas), não do padrão."""
+        (heroi_id -> {chave: ...}). De quem é o painel, em ordem:
+          1. o nome escrito nele;
+          2. as estatísticas exclusivas de um herói já conhecidas;
+          3. as suas falas recentes, todas do mesmo herói ("[FILIPE (ANA)]":
+             o nome ANA, curto e estilizado, o OCR não lê);
+          4. heroi_padrao (o herói atual), fraco.
+        Estatística nova só é aprendida nos casos 1 e 3: com o herói padrão
+        uma troca recente gravava as da Ana no Baptiste, e daí em diante o
+        painel da Ana passava por Baptiste. Retorna (heroi_id, forte)."""
         painel = ler_painel(linhas, largura, altura, tela)
         if not painel:
             return None, False
-        heroi = catalogo.heroi(painel["heroi"]) if painel["heroi"] else None
         chaves = {e["chave"] for e in painel["estatisticas"]}
-        pelas_estatisticas = None if heroi else self._heroi_pelas_estatisticas(chaves)
-        heroi_id = heroi["id"] if heroi else pelas_estatisticas or heroi_padrao
+        heroi = catalogo.heroi(painel["heroi"]) if painel["heroi"] else None
+        heroi_id, origem = (heroi["id"], "nome") if heroi else (None, None)
+        if not heroi_id:
+            heroi_id = self._heroi_pelas_estatisticas(chaves)
+            origem = "estatisticas" if heroi_id else None
+        if not heroi_id and recentes and agora is not None:
+            heroi_id = self._heroi_pelas_falas(agora)
+            if heroi_id and self._painel_de_outro_heroi(chaves, heroi_id):
+                heroi_id = None
+            origem = "falas" if heroi_id else None
+        if not heroi_id and heroi_padrao and not self._painel_de_outro_heroi(chaves, heroi_padrao):
+            heroi_id, origem = heroi_padrao, "padrao"
         if not heroi_id:
             return None, False
-        if not heroi and not pelas_estatisticas and self._painel_de_outro_heroi(chaves, heroi_id):
-            return None, False  # sem nome e com estatísticas que não são do herói padrão: não arrisca
         conhecidas = self.estatisticas_conhecidas.get(heroi_id, {})
+        aprende = origem in ("nome", "falas")
         guardadas = destino.setdefault(heroi_id, {})
         for e in painel["estatisticas"]:
+            if not aprende and e["chave"] not in conhecidas and e["chave"] not in guardadas:
+                continue  # herói incerto: não ensina estatística nova a ele
             anterior = guardadas.get(e["chave"])
             tipo = conhecidas.get(e["chave"]) or (anterior or e)["tipo"]
             if e["tipo"] != tipo:
@@ -750,7 +766,22 @@ class Detector:
                 # o jogo alterna singular/plural: fica o rótulo mais longo (plural)
                 "rotulo": max(e["rotulo"], anterior["rotulo"] if anterior else "", key=len),
                 "ordem": anterior["ordem"] if anterior and e["ordem"] == 0 else e["ordem"]}
-        return heroi_id, heroi is not None or pelas_estatisticas is not None
+        return heroi_id, origem != "padrao"
+
+    def _heroi_pelas_falas(self, agora):
+        """O herói das suas falas dos últimos FALAS_RECENTES s, se forem 2 ou
+        mais falas distintas e todas do mesmo herói."""
+        if not self.nome_jogador:
+            return None
+        herois, recentes = set(), []
+        for t, nome, heroi_nome, texto, _ in self.partida.sinais_heroi:
+            if agora - FALAS_RECENTES <= t <= agora and mesmo_nome(nome, self.nome_jogador) \
+                    and fala_nova(recentes, t, texto):
+                herois.add(heroi_nome)
+        if len(herois) != 1 or len(recentes) < 2:
+            return None
+        heroi = catalogo.heroi(herois.pop())
+        return heroi["id"] if heroi else None
 
     def _heroi_pelas_estatisticas(self, chaves):
         """Sem o nome lido no painel: o herói dono das estatísticas da tela.

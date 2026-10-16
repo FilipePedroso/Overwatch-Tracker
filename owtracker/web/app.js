@@ -873,7 +873,7 @@ function paginaAjustes() {
   <div class="topo"><div><h1>Ajustes</h1></div></div>
   <section class="painel"><header><h2>Detecção</h2></header><div class="ajustes">
     <div class="ajuste"><div class="texto"><b>Seu nome no jogo</b>
-      <span>BattleTag sem o #. Usado para achar o seu herói nas legendas, ex.: [FILIPE (ROADHOG)]. Vazio = o app aprende sozinho.</span></div>
+      <span>BattleTag sem o #. Usado para achar o seu herói nas legendas, ex.: [SEUNOME (ROADHOG)]. Vazio = o app aprende sozinho.</span></div>
       <input type="text" id="nome-jogador" value="${esc(a.nome_jogador || "")}"><button class="botao" data-salvar-nome>Salvar</button></div>
     <div class="ajuste"><div class="texto"><b>Modo diagnóstico</b>
       <span>Guarda o texto lido da tela e alguns prints, para calibrar a detecção.</span></div>
