@@ -509,3 +509,46 @@ a.sem-estilo:hover .nome { color: var(--laranja); }
 .filtro-bloco { padding: 0 16px 10px; }
 .chips.pequenas { display: inline-flex; }
 .chips.pequenas button { font-size: 11px; padding: 3px 9px; }
+
+/* linha do tempo (winrate diário) */
+.linha-tempo { margin-top: 16px; }
+.lt-resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 0 16px 14px; }
+.lt-resumo > div { background: var(--painel-2); border-radius: 8px; padding: 10px 12px; }
+.lt-resumo small { display: block; color: var(--texto-3); font: 700 10px Inter; letter-spacing: .06em; text-transform: uppercase; }
+.lt-resumo b { display: block; font: 700 26px "Barlow Condensed"; line-height: 1.15; }
+.lt-resumo b em { font-style: normal; font-size: 16px; color: var(--texto-3); }
+.lt-resumo span { color: var(--texto-2); font-size: 12px; }
+.lt-grafico { display: grid; grid-template-columns: 38px 1fr; padding: 0 16px 6px; }
+.lt-eixo { position: relative; height: 128px; margin-top: 10px; }
+.lt-eixo span { position: absolute; right: 6px; transform: translateY(-50%); color: var(--texto-3); font-size: 10px; }
+.lt-rolagem { overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+.lt-rolagem::-webkit-scrollbar { height: 6px; } .lt-rolagem::-webkit-scrollbar-thumb { background: var(--painel-3); border-radius: 6px; }
+.lt-colunas { display: flex; align-items: flex-start; gap: 6px; width: 100%; min-width: max-content; padding-top: 10px;
+  background: linear-gradient(var(--borda), var(--borda)) 0 74px / 100% 1px no-repeat; }
+.lt-dia { position: relative; flex: 1 0 42px; max-width: 140px; border-radius: 6px; outline: none; }
+.lt-dia:hover, .lt-dia:focus { background: color-mix(in srgb, var(--painel-3) 70%, transparent); }
+.lt-plot { position: relative; height: 128px; }
+.lt-barra { position: absolute; left: 50%; width: 20px; margin-left: -10px; display: block; }
+.lt-barra.pos { background: var(--vitoria); border-radius: 4px 4px 0 0; }
+.lt-barra.neg { background: var(--derrota); border-radius: 0 0 4px 4px; }
+.lt-barra.neutra { background: var(--empate); border-radius: 2px; transform: translateY(50%); }
+.lt-rotulo { position: absolute; left: 0; right: 0; text-align: center; font: 700 12px "Barlow Condensed"; color: var(--texto); }
+.lt-partidas { display: grid; grid-template-columns: repeat(4, 8px); gap: 3px; justify-content: center; margin: 2px 0 8px; min-height: 8px; }
+.lt-partidas i { width: 8px; height: 8px; border-radius: 2px; display: block; }
+.lt-data { text-align: center; margin: 8px 0 6px; line-height: 1.1; }
+.lt-data b { display: block; font: 600 12px "Barlow Condensed"; color: var(--texto-2); }
+.lt-data small { color: var(--texto-3); font-size: 10px; }
+.lt-dia.melhor .lt-data b { color: var(--vitoria); } .lt-dia.pior .lt-data b { color: var(--derrota); }
+.lt-pausa { width: 18px; flex: none; height: 128px; display: grid; place-items: center;
+  background: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--borda) 60%, transparent) 4px 5px); border-radius: 4px; }
+.lt-pausa span { writing-mode: vertical-rl; color: var(--texto-3); font-size: 9px; }
+.lt-dica { display: none; position: absolute; z-index: 5; top: 4px; left: calc(100% + 6px); width: 210px; background: var(--painel-3);
+  border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; box-shadow: 0 8px 24px rgba(0,0,0,.45); pointer-events: none; }
+.lt-dia:hover .lt-dica, .lt-dia:focus .lt-dica { display: block; }
+.lt-dia:nth-last-child(-n+5) .lt-dica { left: auto; right: calc(100% + 6px); }
+.lt-dica b { display: block; text-transform: capitalize; font-size: 12px; }
+.lt-dica-taxa { font: 700 24px "Barlow Condensed"; }
+.lt-dica small { display: block; color: var(--texto-2); font-size: 11px; margin-top: 4px; }
+.lt-legenda { display: flex; flex-wrap: wrap; gap: 14px; padding: 4px 16px 14px; color: var(--texto-3); font-size: 11px; }
+.lt-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.lt-legenda i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }

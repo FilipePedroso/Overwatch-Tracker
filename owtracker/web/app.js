@@ -285,6 +285,77 @@ function blocoAoVivo() {
   </section>`;
 }
 
+// ------------------------------------------------------------------ linha do tempo (winrate diário)
+
+const partidasTxt = (n) => `${n} partida${n === 1 ? "" : "s"}`;
+const DIAS_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const ALTURA_DIA = 64;  // px de cada lado da linha dos 50%
+
+function blocoLinhaDoTempo(l) {
+  // Um dia por coluna: barra para cima (acima de 50%) ou para baixo (abaixo),
+  // e embaixo as partidas do dia, em ordem, como quadradinhos V/D/E.
+  if (!l.length) return "";
+  const porDia = agrupar(l, (p) => p.data_hora.slice(0, 10));
+  const dias = [...porDia.keys()].sort();
+  const cor = (p) => (p.resultado === "Vitória" ? "var(--vitoria)" : p.resultado === "Derrota" ? "var(--derrota)" : "var(--empate)");
+  const dataDe = (d) => new Date(`${d}T12:00:00`);
+  const dd = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+  const resumo = dias.map((d) => ({ dia: d, partidas: porDia.get(d).sort((a, b) => a.data_hora.localeCompare(b.data_hora)), t: taxa(porDia.get(d)) }));
+  const comTaxa = resumo.filter((r) => r.t !== null);
+  // Melhor/pior dia: um dia de 1 partida (100% ou 0%) não diz muito; se
+  // houver 2+ dias com 3 ou mais partidas, só eles disputam.
+  const cheios = comTaxa.filter((r) => r.partidas.length >= 3);
+  const candidatos = cheios.length >= 2 ? cheios : comTaxa;
+  const melhor = candidatos.reduce((a, r) => (!a || r.t > a.t || (r.t === a.t && r.partidas.length > a.partidas.length) ? r : a), null);
+  const pior = candidatos.reduce((a, r) => (!a || r.t < a.t || (r.t === a.t && r.partidas.length > a.partidas.length) ? r : a), null);
+  const positivos = comTaxa.filter((r) => r.t > 50).length;
+  // dias seguidos acima de 50% até hoje (ou o último dia jogado)
+  let seguidos = 0;
+  for (let i = comTaxa.length - 1; i >= 0 && comTaxa[i].t > 50; i--) seguidos++;
+
+  const colunas = [];
+  resumo.forEach((r, i) => {
+    if (i) {
+      const vazio = Math.round((dataDe(r.dia) - dataDe(resumo[i - 1].dia)) / 864e5) - 1;
+      if (vazio > 0) colunas.push(`<div class="lt-pausa" title="${vazio} dia${vazio > 1 ? "s" : ""} sem jogar"><span>${vazio}d</span></div>`);
+    }
+    const v = vitorias(r.partidas), dr = derrotas(r.partidas), e = r.partidas.length - v - dr;
+    const altura = r.t === null ? 0 : Math.max(3, (Math.abs(r.t - 50) / 50) * ALTURA_DIA);
+    const acima = r.t !== null && r.t >= 50;
+    const barra = r.t === null ? "" : `<i class="lt-barra ${r.t > 50 ? "pos" : r.t < 50 ? "neg" : "neutra"}"
+      style="height:${altura}px;${acima ? `bottom:${ALTURA_DIA}px` : `top:${ALTURA_DIA}px`}"></i>`;
+    const herois = [...agrupar(r.partidas, (p) => heroiDe(p)?.nome || p.heroi).entries()]
+      .sort((a, b) => b[1].length - a[1].length).map(([n, x]) => `${n} ${vitorias(x)}V ${derrotas(x)}D`).join(" · ");
+    const destaque = r === melhor && comTaxa.length > 1 ? "melhor" : r === pior && comTaxa.length > 1 ? "pior" : "";
+    const data = dataDe(r.dia);
+    colunas.push(`<div class="lt-dia ${destaque}" tabindex="0" aria-label="${esc(`${dd(r.dia)}: ${pct(r.t)}, ${v} vitórias, ${dr} derrotas`)}">
+      <div class="lt-plot">${barra}${destaque ? `<b class="lt-rotulo" style="${acima ? `top:${ALTURA_DIA + 3}px` : `bottom:${ALTURA_DIA + 3}px`}">${pct(r.t)}</b>` : ""}</div>
+      <div class="lt-data"><b>${dd(r.dia)}</b><small>${DIAS_SEMANA[data.getDay()]}</small></div>
+      <div class="lt-partidas">${r.partidas.map((p) => `<i style="background:${cor(p)}"></i>`).join("")}</div>
+      <div class="lt-dica"><b>${data.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}</b>
+        <div class="lt-dica-taxa" style="color:${corTaxa(r.t)}">${pct(r.t)}</div>
+        <div>${v} vitória${v === 1 ? "" : "s"} · ${dr} derrota${dr === 1 ? "" : "s"}${e ? ` · ${e} empate${e === 1 ? "" : "s"}` : ""}</div>
+        <small>${esc(herois)}</small></div>
+    </div>`);
+  });
+
+  return `<section class="painel linha-tempo"><header><h2>Linha do tempo</h2>
+      <small>winrate por dia · ${dias.length} dia${dias.length === 1 ? "" : "s"} jogado${dias.length === 1 ? "" : "s"}</small></header>
+    <div class="lt-resumo">
+      ${melhor ? `<div><small>Melhor dia</small><b style="color:${corTaxa(melhor.t)}">${pct(melhor.t)}</b><span>${dd(melhor.dia)} · ${partidasTxt(melhor.partidas.length)}${candidatos === cheios ? " · dias com 3+" : ""}</span></div>` : ""}
+      ${pior && comTaxa.length > 1 ? `<div><small>Pior dia</small><b style="color:${corTaxa(pior.t)}">${pct(pior.t)}</b><span>${dd(pior.dia)} · ${partidasTxt(pior.partidas.length)}${candidatos === cheios ? " · dias com 3+" : ""}</span></div>` : ""}
+      <div><small>Dias positivos</small><b>${positivos}<em> / ${comTaxa.length}</em></b><span>acima de 50%</span></div>
+      <div><small>Sequência atual</small><b>${seguidos}</b><span>${seguidos === 1 ? "dia acima" : "dias seguidos acima"} de 50%</span></div>
+      <div><small>Partidas por dia</small><b>${decimal(l.length / dias.length)}</b><span>média nos dias jogados</span></div>
+    </div>
+    <div class="lt-grafico">
+      <div class="lt-eixo"><span style="top:0">100%</span><span style="top:${ALTURA_DIA}px">50%</span><span style="top:${2 * ALTURA_DIA}px">0%</span></div>
+      <div class="lt-rolagem"><div class="lt-colunas">${colunas.join("")}</div></div>
+    </div>
+    <div class="lt-legenda"><span><i style="background:var(--vitoria)"></i>vitória</span><span><i style="background:var(--derrota)"></i>derrota</span><span><i style="background:var(--empate)"></i>empate</span><span>barra: acima ou abaixo de 50% no dia · passe o mouse num dia para detalhes</span></div>
+  </section>`;
+}
+
 function paginaDashboard() {
   const l = filtradas();
   const t = taxa(l), v = vitorias(l), d = derrotas(l), em = l.length - v - d;
@@ -335,7 +406,8 @@ function paginaDashboard() {
       <section class="painel"><header><h2>Tendência</h2><small>winrate acumulado · últimas 20</small></header>
         <div class="tendencia">${tendencia(l)}</div></section>
     </div>
-  </div>`;
+  </div>
+  ${blocoLinhaDoTempo(l)}`;
 }
 
 // ------------------------------------------------------------------ histórico
@@ -963,8 +1035,13 @@ function desenhar() {
   const { pagina, id } = rota();
   document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("ativo", a.dataset.pagina === (MENU_DE[pagina] || pagina)));
   const foco = document.activeElement?.id;
+  const rolagem = document.querySelector(".lt-rolagem");
+  const noFim = !rolagem || rolagem.scrollLeft + rolagem.clientWidth >= rolagem.scrollWidth - 8;
+  const posicao = rolagem?.scrollLeft;
   document.getElementById("pagina").innerHTML = id && detalhes[pagina] ? detalhes[pagina](decodeURIComponent(id)) : paginas[pagina]();
   if (foco === "busca") { const b = document.getElementById("busca"); b.focus(); b.setSelectionRange(b.value.length, b.value.length); }
+  const nova = document.querySelector(".lt-rolagem");
+  if (nova) nova.scrollLeft = noFim ? nova.scrollWidth : posicao;
 }
 
 document.addEventListener("click", async (e) => {
